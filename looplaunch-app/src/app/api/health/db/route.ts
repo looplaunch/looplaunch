@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { checkMongoConnection } from "@/lib/db/mongodb";
+import { checkSupabaseConnection } from "@/lib/db/supabase";
 
 export async function GET() {
   try {
-    const health = await checkMongoConnection();
+    const health = await checkSupabaseConnection();
     if (health.ok) {
       return NextResponse.json({
         status: "ok",

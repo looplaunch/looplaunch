@@ -237,6 +237,7 @@ export interface ConversationalPromptOptions {
   researchStatus?: string;
   intentGuidance?: string;
   resolvedReference?: string;
+  frameworkContext?: string;
 }
 
 /**
@@ -258,6 +259,7 @@ export function buildConversationalAdvisorPrompt(options: ConversationalPromptOp
     researchStatus,
     intentGuidance,
     resolvedReference,
+    frameworkContext,
   } = options;
 
   // Format recent conversation history (last 8 messages)
@@ -271,6 +273,15 @@ export function buildConversationalAdvisorPrompt(options: ConversationalPromptOp
   // Optional summary of older messages
   const summaryBlock = conversationSummary
     ? `═══ PREVIOUS DISCUSSION SUMMARY ═══\n${conversationSummary}\n\n`
+    : "";
+
+  // Proprietary framework section (RAG from Loop Launch framework docs)
+  const frameworkSection = frameworkContext?.trim()
+    ? `═══ LOOP LAUNCH PROPRIETARY FRAMEWORK (RETRIEVED KNOWLEDGE) ═══
+[The following verified framework passages from Loop Launch are authoritative for this industry and problem:]
+${frameworkContext}
+
+`
     : "";
 
   // Web research section (only if available)
@@ -296,7 +307,7 @@ ${researchText}
 ${summaryBlock}═══ CONVERSATION HISTORY (Previous turns in this session) ═══
 ${historyText}
 
-${webResearchSection}
+${frameworkSection}${webResearchSection}
 ═══ AUTHORITATIVE COMPANY INTELLIGENCE BASE ═══
 Company: ${companyIntel.name} (${companyIntel.website || "N/A"})
 Core Focus: ${companyIntel.description}
@@ -313,7 +324,11 @@ Key Strategic Bottleneck: ${diagnosis?.keyInsights?.[0] || "Acquisition velocity
 "${question}"
 ${referenceNote}${intentNote}
 ═══ CONVERSATIONAL RULES ═══
-1. **CONTINUITY IS MANDATORY**:
+1. **GROUND IN LOOP LAUNCH FRAMEWORK**:
+   - If the "LOOP LAUNCH PROPRIETARY FRAMEWORK" section above contains relevant principles, frameworks, loops, or heuristics, prioritize applying them directly to the client's problem.
+   - Mention the framework terminology and principles naturally without reading like a textbook.
+
+2. **CONTINUITY IS MANDATORY**:
    - Understand the current question in relation to the conversation history above.
    - If the user asks "Why?", explain the causal mechanism behind the statement you made in the previous message.
    - If the user asks "How do we fix it?", provide concrete operational steps for the specific problem discussed above.
@@ -321,7 +336,7 @@ ${referenceNote}${intentNote}
    - If the user tests a pivot ("What if we target SMBs instead?"), re-evaluate the strategy under that scenario and contrast it with previous points.
    - NEVER repeat your prior answers. Build forward.
 
-2. **CONCISE & DIRECT BY DEFAULT**:
+3. **CONCISE & DIRECT BY DEFAULT**:
    - DO NOT generate a 500-word boilerplate consulting report.
    - Answer the actual question that was asked. A simple question deserves a crisp, 1-3 paragraph answer or focused bullets.
    - Use natural transitions ("The catch is...", "That changes the economics.", "Looking at your customer acquisition cost...", "The underlying reason is...").

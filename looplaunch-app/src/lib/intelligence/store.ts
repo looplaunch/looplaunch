@@ -1,21 +1,30 @@
 /**
- * Intelligence Store — MongoDB Atlas persistent storage with in-memory caching.
+ * Intelligence Store — Supabase persistent storage with in-memory caching.
  *
  * "Research Once, Answer Many Times"
  *
  * Persists all onboarding intelligence, SWOT diagnosis, market research,
- * and chat history to MongoDB Atlas (sessions collection).
- * Falls back gracefully to in-memory cache if MongoDB is offline.
+ * and chat history to Supabase Postgres (sessions table).
+ * Falls back gracefully to in-memory cache if Supabase is offline.
  */
 
-import type { IntelligenceSession, PipelineStatus, ChatMessage } from "./types";
-import { getDatabase } from "@/lib/db/mongodb";
+import type {
+  IntelligenceSession,
+  PipelineStatus,
+  ChatMessage,
+  OnboardingInput,
+  CompanyIntelligence,
+  CompetitorIntelligence,
+  MarketIntelligence,
+  StrategicDiagnosis,
+} from "./types";
+import { getSupabase } from "@/lib/db/supabase";
 
 // ──────────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────────
 
-const SESSIONS_COLLECTION = "sessions";
+const SESSIONS_TABLE = "sessions";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in-memory TTL
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -26,7 +35,6 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const globalStore = globalThis as unknown as {
   __intelligenceStore?: Map<string, IntelligenceSession>;
   __cleanupTimer?: ReturnType<typeof setInterval>;
-  __dbIndexesCreated?: boolean;
 };
 
 function getMemoryStore(): Map<string, IntelligenceSession> {
@@ -42,20 +50,86 @@ function getMemoryStore(): Map<string, IntelligenceSession> {
   return globalStore.__intelligenceStore;
 }
 
-/**
- * Lazily initialize MongoDB collection indexes.
- */
-async function ensureDbIndexes(): Promise<void> {
-  if (globalStore.__dbIndexesCreated) return;
-  try {
-    const db = await getDatabase();
-    const collection = db.collection(SESSIONS_COLLECTION);
-    await collection.createIndex({ id: 1 }, { unique: true });
-    await collection.createIndex({ updatedAt: -1 });
-    globalStore.__dbIndexesCreated = true;
-  } catch (error) {
-    console.warn("[MongoDB Store] Index initialization notice:", error);
-  }
+// ──────────────────────────────────────────────
+// Database Row ↔ Session Mapping
+// ──────────────────────────────────────────────
+
+/** Supabase row shape (snake_case columns) */
+interface SessionRow {
+  id: string;
+  status: string;
+  status_message: string | null;
+  onboarding_input: OnboardingInput;
+  company_intelligence: CompanyIntelligence | null;
+  competitor_intelligence: CompetitorIntelligence[] | null;
+  market_intelligence: MarketIntelligence | null;
+  diagnosis: StrategicDiagnosis | null;
+  messages: ChatMessage[] | null;
+  conversation_summary: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Convert an IntelligenceSession to a Supabase row for insert/upsert. */
+function sessionToRow(session: IntelligenceSession): SessionRow {
+  return {
+    id: session.id,
+    status: session.status,
+    status_message: session.statusMessage || null,
+    onboarding_input: session.onboardingInput,
+    company_intelligence: session.companyIntelligence || null,
+    competitor_intelligence: session.competitorIntelligence || null,
+    market_intelligence: session.marketIntelligence || null,
+    diagnosis: session.diagnosis || null,
+    messages: session.messages || [],
+    conversation_summary: session.conversationSummary || null,
+    error: session.error || null,
+    created_at: session.createdAt,
+    updated_at: session.updatedAt,
+  };
+}
+
+/** Convert a Supabase row back to an IntelligenceSession. */
+function rowToSession(row: SessionRow): IntelligenceSession {
+  const session: IntelligenceSession = {
+    id: row.id,
+    status: row.status as PipelineStatus,
+    statusMessage: row.status_message || "",
+    onboardingInput: row.onboarding_input,
+    messages: row.messages || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+
+  if (row.company_intelligence) session.companyIntelligence = row.company_intelligence;
+  if (row.competitor_intelligence) session.competitorIntelligence = row.competitor_intelligence;
+  if (row.market_intelligence) session.marketIntelligence = row.market_intelligence;
+  if (row.diagnosis) session.diagnosis = row.diagnosis;
+  if (row.conversation_summary) session.conversationSummary = row.conversation_summary;
+  if (row.error) session.error = row.error;
+
+  return session;
+}
+
+/** Convert a partial camelCase update object to snake_case columns for Supabase. */
+function partialUpdatesToRow(
+  updates: Partial<Omit<IntelligenceSession, "id" | "createdAt">>
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (updates.status !== undefined) row.status = updates.status;
+  if (updates.statusMessage !== undefined) row.status_message = updates.statusMessage;
+  if (updates.onboardingInput !== undefined) row.onboarding_input = updates.onboardingInput;
+  if (updates.companyIntelligence !== undefined) row.company_intelligence = updates.companyIntelligence;
+  if (updates.competitorIntelligence !== undefined) row.competitor_intelligence = updates.competitorIntelligence;
+  if (updates.marketIntelligence !== undefined) row.market_intelligence = updates.marketIntelligence;
+  if (updates.diagnosis !== undefined) row.diagnosis = updates.diagnosis;
+  if (updates.messages !== undefined) row.messages = updates.messages;
+  if (updates.conversationSummary !== undefined) row.conversation_summary = updates.conversationSummary;
+  if (updates.error !== undefined) row.error = updates.error;
+  // updated_at is handled by the DB trigger, but we set it here too for consistency
+  if (updates.updatedAt !== undefined) row.updated_at = updates.updatedAt;
+  return row;
 }
 
 // ──────────────────────────────────────────────
@@ -91,14 +165,22 @@ export async function createSession(
   // Cache in-memory
   memory.set(session.id, session);
 
-  // Persist to MongoDB
+  // Persist to Supabase
   try {
-    await ensureDbIndexes();
-    const db = await getDatabase();
-    await db.collection<IntelligenceSession>(SESSIONS_COLLECTION).insertOne({ ...session });
-    console.log(`[MongoDB Store] Created session ${session.id} in MongoDB Atlas.`);
+    const supabase = getSupabase();
+    if (supabase) {
+      const { error } = await supabase
+        .from(SESSIONS_TABLE)
+        .insert(sessionToRow(session));
+
+      if (error) {
+        console.warn(`[Supabase Store] Failed to persist new session ${session.id}:`, error.message);
+      } else {
+        console.log(`[Supabase Store] Created session ${session.id} in Supabase.`);
+      }
+    }
   } catch (error) {
-    console.warn(`[MongoDB Store] Failed to persist new session ${session.id} to MongoDB (in-memory preserved):`, error);
+    console.warn(`[Supabase Store] Failed to persist new session ${session.id} (in-memory preserved):`, error);
   }
 
   return session;
@@ -201,7 +283,7 @@ function createTestSession(id: string): IntelligenceSession {
 }
 
 /**
- * Get a session by ID (checks memory first, falls back to MongoDB).
+ * Get a session by ID (checks memory first, falls back to Supabase).
  */
 export async function getSession(
   sessionId: string
@@ -209,21 +291,25 @@ export async function getSession(
   const memory = getMemoryStore();
   let session = memory.get(sessionId);
 
-  // If not in memory, query MongoDB Atlas
+  // If not in memory, query Supabase
   if (!session) {
     try {
-      const db = await getDatabase();
-      const doc = await db.collection(SESSIONS_COLLECTION).findOne({ id: sessionId });
-      if (doc) {
-        // Strip MongoDB's _id when loading into IntelligenceSession
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { _id, ...rest } = doc;
-        session = rest as unknown as IntelligenceSession;
-        memory.set(sessionId, session);
-        console.log(`[MongoDB Store] Hydrated session ${sessionId} from MongoDB Atlas.`);
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from(SESSIONS_TABLE)
+          .select("*")
+          .eq("id", sessionId)
+          .single();
+
+        if (data && !error) {
+          session = rowToSession(data as SessionRow);
+          memory.set(sessionId, session);
+          console.log(`[Supabase Store] Hydrated session ${sessionId} from Supabase.`);
+        }
       }
     } catch (error) {
-      console.warn(`[MongoDB Store] Error querying session ${sessionId} from MongoDB:`, error);
+      console.warn(`[Supabase Store] Error querying session ${sessionId}:`, error);
     }
   }
 
@@ -263,18 +349,24 @@ export async function addMessageToSession(
   session.updatedAt = new Date().toISOString();
   getMemoryStore().set(sessionId, session);
 
-    // Persist to MongoDB
-    try {
-      const db = await getDatabase();
-      await db.collection<IntelligenceSession>(SESSIONS_COLLECTION).updateOne(
-        { id: sessionId },
-        {
-          $push: { messages: message },
-          $set: { updatedAt: session.updatedAt },
-        }
-      );
-    } catch (error) {
-    console.warn(`[MongoDB Store] Error persisting message to session ${sessionId}:`, error);
+  // Persist to Supabase
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      const { error } = await supabase
+        .from(SESSIONS_TABLE)
+        .update({
+          messages: session.messages,
+          updated_at: session.updatedAt,
+        })
+        .eq("id", sessionId);
+
+      if (error) {
+        console.warn(`[Supabase Store] Error persisting message to session ${sessionId}:`, error.message);
+      }
+    }
+  } catch (error) {
+    console.warn(`[Supabase Store] Error persisting message to session ${sessionId}:`, error);
   }
 
   return session.messages;
@@ -302,18 +394,22 @@ export async function updateConversationSummary(
     getMemoryStore().set(sessionId, session);
 
     try {
-      const db = await getDatabase();
-      await db.collection(SESSIONS_COLLECTION).updateOne(
-        { id: sessionId },
-        {
-          $set: {
-            conversationSummary: summary,
-            updatedAt: session.updatedAt,
-          },
+      const supabase = getSupabase();
+      if (supabase) {
+        const { error } = await supabase
+          .from(SESSIONS_TABLE)
+          .update({
+            conversation_summary: summary,
+            updated_at: session.updatedAt,
+          })
+          .eq("id", sessionId);
+
+        if (error) {
+          console.warn(`[Supabase Store] Error updating summary for ${sessionId}:`, error.message);
         }
-      );
+      }
     } catch (error) {
-      console.warn(`[MongoDB Store] Error updating summary for ${sessionId}:`, error);
+      console.warn(`[Supabase Store] Error updating summary for ${sessionId}:`, error);
     }
   }
 }
@@ -341,21 +437,32 @@ export async function updateSession(
 
   memory.set(sessionId, updated);
 
-  // Persist update to MongoDB
+  // Persist update to Supabase (upsert to handle edge cases)
   try {
-    const db = await getDatabase();
-    await db.collection(SESSIONS_COLLECTION).updateOne(
-      { id: sessionId },
-      {
-        $set: {
-          ...updates,
-          updatedAt: updated.updatedAt,
-        },
-      },
-      { upsert: true }
-    );
+    const supabase = getSupabase();
+    if (supabase) {
+      const dbUpdates = partialUpdatesToRow(updates);
+      dbUpdates.updated_at = updated.updatedAt;
+
+      const { error } = await supabase
+        .from(SESSIONS_TABLE)
+        .update(dbUpdates)
+        .eq("id", sessionId);
+
+      if (error) {
+        // If update fails (row doesn't exist), try upsert with full row
+        console.warn(`[Supabase Store] Update failed for ${sessionId}, attempting upsert:`, error.message);
+        const { error: upsertError } = await supabase
+          .from(SESSIONS_TABLE)
+          .upsert(sessionToRow(updated), { onConflict: "id" });
+
+        if (upsertError) {
+          console.warn(`[Supabase Store] Upsert also failed for ${sessionId}:`, upsertError.message);
+        }
+      }
+    }
   } catch (error) {
-    console.warn(`[MongoDB Store] Error updating session ${sessionId} in MongoDB:`, error);
+    console.warn(`[Supabase Store] Error updating session ${sessionId}:`, error);
   }
 
   return updated;
@@ -378,10 +485,19 @@ export async function updateStatus(
 export async function deleteSession(sessionId: string): Promise<boolean> {
   const deletedFromMemory = getMemoryStore().delete(sessionId);
   try {
-    const db = await getDatabase();
-    await db.collection(SESSIONS_COLLECTION).deleteOne({ id: sessionId });
+    const supabase = getSupabase();
+    if (supabase) {
+      const { error } = await supabase
+        .from(SESSIONS_TABLE)
+        .delete()
+        .eq("id", sessionId);
+
+      if (error) {
+        console.warn(`[Supabase Store] Error deleting session ${sessionId}:`, error.message);
+      }
+    }
   } catch (error) {
-    console.warn(`[MongoDB Store] Error deleting session ${sessionId} from MongoDB:`, error);
+    console.warn(`[Supabase Store] Error deleting session ${sessionId}:`, error);
   }
   return deletedFromMemory;
 }
@@ -391,23 +507,24 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
  */
 export async function listSessions(): Promise<IntelligenceSession[]> {
   try {
-    const db = await getDatabase();
-    const docs = await db
-      .collection(SESSIONS_COLLECTION)
-      .find({})
-      .sort({ updatedAt: -1 })
-      .limit(50)
-      .toArray();
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from(SESSIONS_TABLE)
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .limit(50);
 
-    if (docs && docs.length > 0) {
-      return docs.map((doc) => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { _id, ...rest } = doc;
-        return rest as unknown as IntelligenceSession;
-      });
+      if (data && !error) {
+        return (data as SessionRow[]).map(rowToSession);
+      }
+
+      if (error) {
+        console.warn("[Supabase Store] Error listing sessions:", error.message);
+      }
     }
   } catch (error) {
-    console.warn("[MongoDB Store] Error listing sessions from MongoDB:", error);
+    console.warn("[Supabase Store] Error listing sessions:", error);
   }
 
   return Array.from(getMemoryStore().values());

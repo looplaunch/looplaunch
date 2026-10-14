@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { getSession, addMessageToSession } from "@/lib/intelligence/store";
 import { answerQuestion } from "@/lib/ai/gemini";
+import { retrieveFrameworkContext } from "@/lib/ai/framework-retriever";
 import { researchQuestion } from "@/lib/research/tavily";
 import { analyzeUserQuery } from "@/lib/ai/query-classifier";
 import type {
@@ -113,6 +114,12 @@ export async function POST(request: Request) {
       researchStatus = research.status;
     }
 
+    // ─── STEP 3.5: Retrieve Loop Launch Framework Knowledge (RAG) ───
+    const framework = await retrieveFrameworkContext(
+      question,
+      session.companyIntelligence?.industry
+    );
+
     // ─── STEP 4: Conversational Strategic Reasoning ───
     const answer = await answerQuestion(
       question,
@@ -124,7 +131,8 @@ export async function POST(request: Request) {
       researchStatus,
       priorHistory,
       session.conversationSummary,
-      analysis
+      analysis,
+      framework.formattedContext
     );
 
     // ─── STEP 5: Add Assistant Response to Persistent History ───

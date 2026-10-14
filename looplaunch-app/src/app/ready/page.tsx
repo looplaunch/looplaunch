@@ -36,8 +36,7 @@ export default function ReadyPage() {
         style={{ animationDelay: "200ms" }}
       >
         <div className="rounded-lg border border-border-subtle bg-bg-surface p-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-shimmer" />
+          <div className="flex items-center justify-center mb-3">
             <span className="text-sm font-medium text-text-secondary">
               Workspace active
             </span>

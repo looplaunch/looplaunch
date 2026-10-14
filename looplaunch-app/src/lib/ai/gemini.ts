@@ -563,7 +563,8 @@ export async function answerQuestion(
   researchStatus?: "success" | "no_results" | "failed" | "unconfigured",
   history: ChatMessage[] = [],
   conversationSummary?: string,
-  analysis?: QueryAnalysis
+  analysis?: QueryAnalysis,
+  frameworkContext?: string
 ): Promise<StrategicAnswer> {
   const model = getModel();
 
@@ -605,6 +606,9 @@ Content: ${r.content}`
     if (sourceCount > 0) {
       console.log(`[GEMINI] Research context received (${sourceCount} sources from Tavily)`);
     }
+    if (frameworkContext) {
+      console.log(`[GEMINI] Framework RAG context injected (${frameworkContext.length} chars)`);
+    }
     console.log(`[GEMINI] Generating answer for: "${question.substring(0, 60)}..." (Intent: ${analysis?.intent || "general"})`);
 
     const prompt = buildConversationalAdvisorPrompt({
@@ -619,6 +623,7 @@ Content: ${r.content}`
       researchStatus,
       intentGuidance: analysis?.guidance,
       resolvedReference: analysis?.resolvedReference,
+      frameworkContext,
     });
 
     const result = await model.generateContent(prompt);

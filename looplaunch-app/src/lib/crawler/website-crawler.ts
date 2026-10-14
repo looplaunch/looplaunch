@@ -32,10 +32,15 @@ async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
   }
 
   try {
-    console.log(`[Crawler] Crawling via Crawl4AI: ${url}`);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const apiToken = process.env.CRAWL4AI_API_TOKEN;
+    if (apiToken) {
+      headers["Authorization"] = `Bearer ${apiToken}`;
+    }
+
     const response = await fetch(`${baseUrl}/crawl`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         urls: [url],
         word_count_threshold: 10,
@@ -62,13 +67,23 @@ async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
       return null;
     }
 
+    // In modern Crawl4AI, result.markdown is an object containing { raw_markdown, fit_markdown, etc. }
+    const rawMarkdown: string =
+      typeof result.markdown === "string"
+        ? result.markdown
+        : result.markdown?.raw_markdown ||
+          result.markdown?.fit_markdown ||
+          (typeof result.extracted_content === "string" ? result.extracted_content : "") ||
+          (typeof result.cleaned_html === "string" ? result.cleaned_html : "") ||
+          (typeof result.html === "string" ? result.html : "");
+
     return {
       url,
       title: result.metadata?.title || result.title || "",
       metaDescription: result.metadata?.description || result.meta_description || "",
-      headings: extractHeadingsFromMarkdown(result.markdown || result.extracted_content || ""),
-      mainContent: truncateContent(result.markdown || result.extracted_content || result.html || ""),
-      links: result.links?.internal || [],
+      headings: extractHeadingsFromMarkdown(rawMarkdown),
+      mainContent: truncateContent(rawMarkdown),
+      links: (result.links?.internal || []).map((l: any) => (typeof l === "string" ? l : l?.href || "")).filter(Boolean),
       crawledAt: new Date().toISOString(),
       success: true,
     };

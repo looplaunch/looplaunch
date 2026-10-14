@@ -96,6 +96,7 @@ function IntelligencePageContent() {
   const [question, setQuestion] = useState("");
   const [isAsking, setIsAsking] = useState(false);
   const [error, setError] = useState("");
+  const [latestStreamingMsgId, setLatestStreamingMsgId] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -218,9 +219,14 @@ function IntelligencePageContent() {
       // If server returned the updated messages array, sync with it
       if (data.messages && Array.isArray(data.messages)) {
         setMessages(data.messages);
+        const lastMsg = data.messages[data.messages.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {
+          setLatestStreamingMsgId(lastMsg.id || `stream-${Date.now()}`);
+        }
       } else if (data.answer) {
+        const newId = `assistant-${Date.now()}`;
         const assistantMsg: ChatMessage = {
-          id: `assistant-${Date.now()}`,
+          id: newId,
           role: "assistant",
           content: data.answer.answer,
           timestamp: new Date().toISOString(),
@@ -231,6 +237,7 @@ function IntelligencePageContent() {
           researchStatus: data.answer.researchStatus,
           queryIntent: data.answer.queryIntent,
         };
+        setLatestStreamingMsgId(newId);
         setMessages((prev) => [...prev, assistantMsg]);
       }
     } catch {
@@ -292,23 +299,14 @@ function IntelligencePageContent() {
           </div>
         </div>
 
-        {/* Status indicator */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                status?.status === "ready"
-                  ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
-                  : status?.status === "error"
-                  ? "bg-red-400"
-                  : "bg-amber-400 animate-pulse"
-              }`}
-            />
-            <span className="text-[11px] text-zinc-400 font-medium">
-              {status ? STAGE_LABELS[status.status] : "Connecting..."}
-            </span>
+        {/* Status indicator (only shown while loading or on error) */}
+        {status && status.status !== "ready" && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-zinc-900/80 border border-zinc-800 text-[11px] text-zinc-400 font-medium">
+              {STAGE_LABELS[status.status]}
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       {/* ─── Main Content Container ─── */}
@@ -457,7 +455,10 @@ function IntelligencePageContent() {
 
                       {/* Main Advisor Markdown Content */}
                       <div className="pl-0.5 sm:pl-7">
-                        <MarkdownContent content={msg.content} />
+                        <MarkdownContent
+                          content={msg.content}
+                          animate={msg.id === latestStreamingMsgId}
+                        />
 
                         {/* Verified Evidence & Sources — ONLY rendered when present */}
                         {msg.evidence && msg.evidence.length > 0 && (
@@ -638,9 +639,8 @@ function IntelligencePageContent() {
               </button>
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2 px-1">
+            <div className="text-[11px] text-zinc-500 mt-2 px-1 text-center sm:text-left">
               <span>Press Enter to send · Shift + Enter for new line</span>
-              <span className="hidden sm:inline font-mono text-[10px]">Session Context Active</span>
             </div>
           </div>
         </div>
