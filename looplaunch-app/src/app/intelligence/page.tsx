@@ -18,6 +18,9 @@ import {
   CheckCircle2,
   Clock,
   Layers,
+  Video,
+  Calendar,
+  Zap,
 } from "lucide-react";
 import type {
   StatusResponse,
@@ -369,39 +372,90 @@ function IntelligencePageContent() {
         {/* ─── Conversational Stream ─── */}
         {!isGathering && status?.status === "ready" && (
           <div className="flex-1 flex flex-col pt-6 pb-28">
-            {/* Welcome banner when no messages yet */}
+            {/* Welcome banner: First give 2 options — 7-day strategy or 14-day strategy */}
             {messages.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="my-auto py-10 flex flex-col items-center text-center"
+                className="my-auto py-8 flex flex-col items-center text-center max-w-2xl mx-auto w-full"
               >
                 <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-300 shadow-sm">
-                  <Sparkles className="w-6 h-6 text-zinc-300" />
+                  <Sparkles className="w-6 h-6 text-emerald-400" />
                 </div>
-                <h3 className="text-xl font-semibold text-zinc-100 mb-2 tracking-tight">
-                  Strategic Advisor Active
+                <h3 className="text-xl sm:text-2xl font-semibold text-zinc-100 mb-2 tracking-tight">
+                  Intelligence Ready for {companyName}
                 </h3>
-                <p className="text-xs text-zinc-400 max-w-md mb-8 leading-relaxed">
-                  Your intelligence profile is loaded. Ask direct questions, challenge assumptions, or explore scenarios. The advisor retains memory across the dialogue.
+                <p className="text-xs sm:text-sm text-zinc-400 max-w-lg mb-8 leading-relaxed">
+                  Your competitive footprint and category positioning have been synthesized. Choose your execution sprint to generate a customized, day-by-day action roadmap:
                 </p>
 
-                {/* Curated starter questions */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl text-left">
-                  {STARTER_QUESTIONS.map((item, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleAsk(item.query)}
-                      className="group p-3.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-850/80 border border-zinc-800 hover:border-zinc-700 transition-all text-left cursor-pointer"
-                    >
-                      <span className="text-[10px] uppercase font-semibold tracking-wider text-zinc-500 group-hover:text-zinc-400 block mb-1">
-                        {item.category}
-                      </span>
-                      <p className="text-xs text-zinc-300 group-hover:text-zinc-100 font-medium leading-snug">
-                        {item.query}
+                {/* The 2 Primary Strategy Options */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mb-8 text-left">
+                  {/* Option 1: 7-Day Strategy */}
+                  <button
+                    onClick={() =>
+                      handleAsk(
+                        `Build a prioritized 7-Day execution strategy for ${companyName}. Focus on fast customer traction, validated positioning hooks, short-form organic content, and immediate outbound steps.`
+                      )
+                    }
+                    className="group relative p-5 rounded-2xl bg-gradient-to-b from-zinc-900/90 to-zinc-900/40 hover:from-zinc-850 hover:to-zinc-900 border border-zinc-800 hover:border-amber-500/50 transition-all cursor-pointer shadow-lg hover:shadow-amber-500/5 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1.5">
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          7-Day Sprint
+                        </span>
+                        <span className="text-[11px] text-zinc-400 font-mono">Fast Traction</span>
+                      </div>
+                      <h4 className="text-base font-semibold text-zinc-100 group-hover:text-amber-300 transition-colors mb-1.5">
+                        7-Day Strategy
+                      </h4>
+                      <p className="text-xs text-zinc-400 leading-relaxed mb-4">
+                        Rapid execution sprint to test core messaging hooks, kickstart organic short-form video momentum, and drive immediate qualified leads.
                       </p>
-                    </button>
-                  ))}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400 group-hover:text-amber-300 pt-2 border-t border-zinc-800/80">
+                      <span>Generate 7-Day Strategy</span>
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
+
+                  {/* Option 2: 14-Day Strategy */}
+                  <button
+                    onClick={() =>
+                      handleAsk(
+                        `Build a comprehensive 14-Day marketing and growth strategy for ${companyName}. Cover positioning differentiation, short-form video content engines, competitor teardowns, outbound loops, and conversion funnels.`
+                      )
+                    }
+                    className="group relative p-5 rounded-2xl bg-gradient-to-b from-zinc-900/90 to-zinc-900/40 hover:from-zinc-850 hover:to-zinc-900 border border-zinc-800 hover:border-violet-500/50 transition-all cursor-pointer shadow-lg hover:shadow-violet-500/5 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 flex items-center gap-1.5">
+                          <Calendar className="w-3 h-3 text-violet-400" />
+                          14-Day Roadmap
+                        </span>
+                        <span className="text-[11px] text-zinc-400 font-mono">Full Foundation</span>
+                      </div>
+                      <h4 className="text-base font-semibold text-zinc-100 group-hover:text-violet-300 transition-colors mb-1.5">
+                        14-Day Strategy
+                      </h4>
+                      <p className="text-xs text-zinc-400 leading-relaxed mb-4">
+                        Comprehensive multi-channel roadmap covering positioning contrast, video content loops, competitor teardowns, and automated conversion.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-violet-400 group-hover:text-violet-300 pt-2 border-t border-zinc-800/80">
+                      <span>Generate 14-Day Strategy</span>
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
+                </div>
+
+                <div className="w-full flex items-center gap-3 my-2 text-zinc-600 text-xs">
+                  <div className="flex-1 h-px bg-zinc-800" />
+                  <span>or ask any custom strategic question below</span>
+                  <div className="flex-1 h-px bg-zinc-800" />
                 </div>
               </motion.div>
             ) : (
@@ -422,6 +476,9 @@ function IntelligencePageContent() {
                   }
 
                   // Assistant response
+                  const mentionsShortFormVideo =
+                    /(tiktok|reels?|shorts?|short-form video)/i.test(msg.content);
+
                   return (
                     <div
                       key={msg.id || index}
@@ -459,6 +516,38 @@ function IntelligencePageContent() {
                           content={msg.content}
                           animate={msg.id === latestStreamingMsgId}
                         />
+
+                        {/* Interactive TikTok & Reel Scripts Card (if answer mentions short-form video) */}
+                        {mentionsShortFormVideo && (
+                          <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-violet-950/40 via-zinc-900 to-zinc-900 border border-violet-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400 shrink-0 mt-0.5 sm:mt-0">
+                                <Video className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-zinc-200">
+                                  Short-Form Video Strategy Detected
+                                </p>
+                                <p className="text-[11px] text-zinc-400 leading-snug">
+                                  Would you like me to generate the complete, ready-to-record scripts (3-second visual hooks, on-screen text, audio, and CTAs) for these Reels and TikToks?
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() =>
+                                handleAsk(
+                                  "Please generate the complete, ready-to-record scripts (3-second visual hooks, on-screen text, voiceover script, and CTA) for the recommended Reels and TikToks."
+                                )
+                              }
+                              disabled={isAsking}
+                              className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm"
+                            >
+                              <Video className="w-3.5 h-3.5" />
+                              <span>Generate Scripts</span>
+                              <ChevronRight className="w-3 h-3 opacity-70" />
+                            </button>
+                          </div>
+                        )}
 
                         {/* Verified Evidence & Sources — ONLY rendered when present */}
                         {msg.evidence && msg.evidence.length > 0 && (

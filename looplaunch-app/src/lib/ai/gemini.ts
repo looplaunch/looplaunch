@@ -313,6 +313,55 @@ function getMockStrategicAnswer(
   analysis?: QueryAnalysis
 ): StrategicAnswer {
   const intent = analysis?.intent || "general_strategic";
+  const qLower = question.toLowerCase();
+
+  // ─── Specialized 7-Day Strategy Handler ───
+  if (qLower.includes("7-day") || qLower.includes("7 day")) {
+    const responseText = `Here is your **7-Day Tactical Execution Sprint** for **${companyIntel.name}**:\n\n### **Phase 1: Friction Audit & Positioning Hook (Days 1–2)**\n• **Day 1:** Identify the #1 operational bottleneck your ICP hates about legacy alternatives. Turn this contrast into a 1-sentence value proposition.\n• **Day 2:** Update your landing page hero and primary call-to-action to highlight this immediate outcome.\n\n### **Phase 2: Organic Short-Form Video & Content Engine (Days 3–4)**\n• **Day 3:** Film and publish 2 organic short-form videos (**TikToks & Instagram Reels**) highlighting common industry headaches and demonstrating how ${companyIntel.name} solves them in 60 seconds.\n• **Day 4:** Post 1 high-contrast breakdown on LinkedIn and operator communities where prospects discuss incumbent frustrations.\n\n### **Phase 3: Targeted Outbound & Community Engagement (Days 5–6)**\n• **Day 5:** Send 25 direct founder-to-founder outreach messages to high-fit prospects referencing the video teardown.\n• **Day 6:** Engage in comments on 10 trending competitor posts, offering insightful teardowns rather than sales pitches.\n\n### **Phase 4: Retargeting & Sprint Review (Day 7)**\n• **Day 7:** Audit reply rates and video engagement. Double down on the single hook that generated the highest traffic.\n\n---\n\n💡 **Next Step:** Would you like me to generate the complete, ready-to-record scripts (3-second visual hooks, on-screen text, voiceover script, and CTA) for these Reels and TikToks?`;
+    return {
+      question,
+      answer: responseText,
+      followUpQuestions: [
+        "Generate scripts for the recommended TikToks & Reels",
+        "What metrics should we track on Day 7?",
+      ],
+      confidence: "high",
+      researchStatus: "unconfigured",
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // ─── Specialized 14-Day Growth Roadmap Handler ───
+  if (qLower.includes("14-day") || qLower.includes("14 day")) {
+    const responseText = `Here is your **14-Day Growth & Acquisition Roadmap** for **${companyIntel.name}**:\n\n### **Week 1: Core Positioning & Short-Form Video Machine (Days 1–7)**\n• **Days 1–2 (Positioning Contrast):** Audit the top 5 complaints on competitor reviews and construct your counter-narrative.\n• **Days 3–5 (Video Content Ramp):** Record and publish 4 targeted **TikToks and Instagram Reels** (2 problem-agitation teardowns, 1 behind-the-scenes workflow, and 1 client outcome breakdown).\n• **Days 6–7 (Authority Teardowns):** Repurpose the top-performing video hooks into detailed written case studies and founder threads.\n\n### **Week 2: Direct Distribution, Social Selling & Conversion (Days 8–14)**\n• **Days 8–9 (Outbound Engine):** Launch a hyper-targeted outreach loop to 50 verified operator accounts using video teardowns.\n• **Days 10–11 (Community Activation):** Host an interactive Q&A or share a free template solving a specific operator workflow bottleneck.\n• **Days 12–13 (Frictionless Conversion):** Offer a limited proof-of-concept trial or free teardown audit to warm leads.\n• **Day 14 (Review & Scale):** Analyze acquisition channels and eliminate low-converting activities.\n\n---\n\n💡 **Next Step:** Would you like me to generate the complete, ready-to-record scripts (3-second visual hooks, on-screen text, voiceover script, and CTA) for these Reels and TikToks?`;
+    return {
+      question,
+      answer: responseText,
+      followUpQuestions: [
+        "Generate scripts for the recommended TikToks & Reels",
+        "How do we scale this after Day 14?",
+      ],
+      confidence: "high",
+      researchStatus: "unconfigured",
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // ─── Specialized Short-Form Video Script Generator ───
+  if (qLower.includes("script") || (qLower.includes("reel") && qLower.includes("tiktok"))) {
+    const responseText = `Here are **3 ready-to-record short-form video scripts (for TikTok, Instagram Reels, and YouTube Shorts)** customized for **${companyIntel.name}**:\n\n---\n\n### 🎬 **Script 1: The "Why Your Current Setup Is Costing You" (Problem Teardown)**\n• **Target Audience:** Operators and founders struggling with manual bottlenecks.\n• **Visual Hook (0–3s):** Hold up your phone or point at a messy spreadsheet/dashboard with text on screen: *"Stop paying $1,000s for bloated software."*\n• **On-Screen Text:** *"The dirty secret legacy platforms don't want you to know..."*\n• **Voiceover / Audio:**\n> *"If you're still relying on legacy platforms to manage this, you're literally paying a 40% tax in wasted hours every single month. Here is why the fastest-growing teams stopped doing that in 2026..."*\n• **Visual B-Roll:** Cut to quick screen-recording of ${companyIntel.name} completing the workflow in seconds.\n• **Call to Action (CTA):**\n> *"Comment 'AUDIT' below or check the link in bio to see how much time your team can save this week."*\n\n---\n\n### 🎬 **Script 2: The "Over-the-Shoulder 30-Second Fix" (Product Proof)**\n• **Target Audience:** High-intent buyers wanting speed and simplicity.\n• **Visual Hook (0–3s):** Screen recording showing a timer running. Text: *"Watch this happen in 15 seconds."*\n• **On-Screen Text:** *"Doing in 15 seconds what used to take 2 hours."*\n• **Voiceover / Audio:**\n> *"Most founders think scaling customer acquisition requires a 5-person agency retainer. Watch what happens when you automate the core loop instead..."*\n• **Visual B-Roll:** Fast-paced screen demo showing the output being generated effortlessly.\n• **Call to Action (CTA):**\n> *"Tap the link in bio to test this live on your own company."*\n\n---\n\n### 🎬 **Script 3: The "Unpopular Industry Truth" (Authority Hook)**\n• **Target Audience:** Decision-makers tired of generic agency advice.\n• **Visual Hook (0–3s):** Talking head video with urgent energy: *"I'm going to say something that might make traditional consultants mad..."*\n• **On-Screen Text:** *"Why traditional marketing advice is broken for lean teams"*\n• **Voiceover / Audio:**\n> *"If you don't have $10,000 for ad spend, running paid ads right now is burning cash. You need founder-led distribution and high-contrast positioning first. Here's the exact framework we use at ${companyIntel.name}..."*\n• **Call to Action (CTA):**\n> *"Save this video so you don't forget these steps when planning your week."*`;
+    return {
+      question,
+      answer: responseText,
+      followUpQuestions: [
+        "Give me 3 more viral hooks for Script 1",
+        "Which platform should I post these on first: TikTok or Instagram?",
+      ],
+      confidence: "high",
+      researchStatus: "unconfigured",
+      generatedAt: new Date().toISOString(),
+    };
+  }
 
   let responseText = "";
   let evidenceList: StrategicEvidence[] = [];
