@@ -199,23 +199,23 @@ export function HeroSection() {
         aria-hidden="true"
       >
         <SideRays
-          speed={2.5}
-          rayColor1="#8108ea"
-          rayColor2="#ff96fd"
-          intensity={2}
-          spread={2}
+          speed={1.0}
+          rayColor1="#8B5CF6"
+          rayColor2="#18181B"
+          intensity={0.4}
+          spread={1.5}
           origin="top-right"
           tilt={0}
-          saturation={1.5}
-          blend={0.75}
-          falloff={1.6}
-          opacity={1.0}
+          saturation={0.8}
+          blend={0.5}
+          falloff={2.2}
+          opacity={0.35}
         />
       </div>
 
       {/* Layer 1: Vignette */}
       <div
-        className="absolute inset-0 z-[1] pointer-events-none bg-gradient-to-b from-black/25 via-transparent to-black"
+        className="absolute inset-0 z-[1] pointer-events-none bg-gradient-to-b from-[#09090B]/60 via-transparent to-[#09090B]"
         aria-hidden="true"
       />
 
@@ -231,12 +231,12 @@ export function HeroSection() {
           <div className="flex items-center justify-between w-full mb-6 px-1">
             <button
               onClick={goPrev}
-              className="text-xs text-text-secondary hover:text-[#9d5ce6] transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="text-xs text-text-secondary hover:text-[#8B5CF6] transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <span>&larr;</span>
               <span>Back</span>
             </button>
-            <div className="text-xs font-mono text-[#9d5ce6] tracking-wider uppercase font-semibold">
+            <div className="text-xs font-mono text-[#8B5CF6] tracking-wider uppercase font-semibold">
               Step {currentStepIndex + 1} of {STEPS.length - 1}
             </div>
           </div>
@@ -269,8 +269,8 @@ export function HeroSection() {
                     className={`
                       relative flex items-center w-full px-4 py-2.5 rounded-xl
                       bg-bg-surface border transition-all duration-200
-                      border-border-subtle hover:border-[#9d5ce6]/40
-                      focus-within:border-[#9d5ce6] focus-within:shadow-[0_0_22px_rgba(157,92,230,0.22)]
+                      border-border-subtle hover:border-[#8B5CF6]/40
+                      focus-within:border-[#8B5CF6] focus-within:ring-1 focus-within:ring-[#8B5CF6]/30
                     `}
                   >
                     <input
@@ -295,7 +295,7 @@ export function HeroSection() {
                     <button
                       onClick={handleTextSubmit}
                       aria-label="Continue"
-                      className="ml-2 flex items-center justify-center w-9 h-9 rounded-lg bg-[#9d5ce6] text-white hover:bg-[#ad6ef8] hover:shadow-[0_0_15px_rgba(157,92,230,0.35)] active:scale-95 transition-all cursor-pointer shrink-0"
+                      className="ml-2 flex items-center justify-center w-9 h-9 rounded-lg bg-[#8B5CF6] text-white hover:bg-[#7C3AED] active:scale-95 transition-all cursor-pointer shrink-0"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -304,7 +304,7 @@ export function HeroSection() {
                   </div>
                 ) : (
                   /* Textarea input */
-                  <div className="relative w-full rounded-xl bg-bg-surface border border-border-subtle hover:border-[#9d5ce6]/40 focus-within:border-[#9d5ce6] focus-within:shadow-[0_0_22px_rgba(157,92,230,0.2)] transition-all p-3 sm:p-4 text-left">
+                  <div className="relative w-full rounded-xl bg-bg-surface border border-border-subtle hover:border-[#8B5CF6]/40 focus-within:border-[#8B5CF6] focus-within:ring-1 focus-within:ring-[#8B5CF6]/30 transition-all p-3 sm:p-4 text-left">
                     <textarea
                       ref={textareaRef}
                       rows={3}
@@ -347,7 +347,7 @@ export function HeroSection() {
                     )}
                     <button
                       onClick={handleTextSubmit}
-                      className="px-5 py-2.5 rounded-lg text-xs sm:text-sm font-medium bg-[#9d5ce6] text-white hover:bg-[#ad6ef8] hover:shadow-[0_0_15px_rgba(157,92,230,0.35)] active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-5 py-2.5 rounded-lg text-xs sm:text-sm font-medium bg-[#8B5CF6] text-white hover:bg-[#7C3AED] active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                     >
                       <span>Continue</span>
                       <span>&rarr;</span>
@@ -383,10 +383,10 @@ export function HeroSection() {
                     relative flex items-center w-full px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl
                     bg-bg-surface border transition-all duration-200 gap-2
                     ${websiteError
-                      ? "border-error shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                      ? "border-error ring-1 ring-error/30"
                       : websiteFocused
-                        ? "border-[#9d5ce6] shadow-[0_0_22px_rgba(157,92,230,0.22)]"
-                        : "border-border-subtle hover:border-[#9d5ce6]/40"
+                        ? "border-[#8B5CF6] ring-1 ring-[#8B5CF6]/30"
+                        : "border-border-subtle hover:border-[#8B5CF6]/40"
                     }
                   `}
                 >
@@ -401,7 +401,7 @@ export function HeroSection() {
                         onError={() => setFaviconError(true)}
                       />
                     ) : (
-                      <svg className="w-4 h-4 text-[#8b7696] select-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-4 h-4 text-text-tertiary select-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
                         <line x1="2" y1="12" x2="22" y2="12" />
                         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -435,7 +435,7 @@ export function HeroSection() {
                   <button
                     onClick={handleWebsiteSubmit}
                     aria-label="Continue with website"
-                    className="ml-1 flex items-center justify-center w-9 h-9 rounded-lg bg-[#9d5ce6] text-white hover:bg-[#ad6ef8] hover:shadow-[0_0_15px_rgba(157,92,230,0.35)] active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                    className="ml-1 flex items-center justify-center w-9 h-9 rounded-lg bg-[#8B5CF6] text-white hover:bg-[#7C3AED] active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -485,8 +485,8 @@ export function HeroSection() {
                         w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-200 cursor-pointer
                         flex items-center gap-3 group
                         ${isSelected
-                          ? "border-[#9d5ce6] bg-[#9d5ce6]/10 shadow-[0_0_20px_rgba(157,92,230,0.15)]"
-                          : "border-border-subtle bg-bg-surface hover:border-[#9d5ce6]/40 hover:bg-bg-elevated"
+                          ? "border-[#8B5CF6] bg-[#8B5CF6]/10"
+                          : "border-border-subtle bg-bg-surface hover:border-[#8B5CF6]/40 hover:bg-bg-elevated"
                         }
                       `}
                     >
@@ -495,8 +495,8 @@ export function HeroSection() {
                         className={`
                           w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all
                           ${isSelected
-                            ? "border-[#9d5ce6] bg-[#9d5ce6]"
-                            : "border-border-subtle group-hover:border-[#9d5ce6]/50"
+                            ? "border-[#8B5CF6] bg-[#8B5CF6]"
+                            : "border-border-subtle group-hover:border-[#8B5CF6]/50"
                           }
                         `}
                       >
@@ -523,7 +523,7 @@ export function HeroSection() {
               <div className="flex items-center justify-center gap-3 mt-6">
                 <button
                   onClick={handleReasonsSubmit}
-                  className="px-6 py-2.5 rounded-xl text-sm font-medium bg-[#9d5ce6] text-white hover:bg-[#ad6ef8] hover:shadow-[0_0_15px_rgba(157,92,230,0.35)] active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                  className="px-6 py-2.5 rounded-xl text-sm font-medium bg-[#8B5CF6] text-white hover:bg-[#7C3AED] active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <span>Continue</span>
                   <span>&rarr;</span>
@@ -561,19 +561,19 @@ export function HeroSection() {
                   return (
                     <div
                       key={step.key}
-                      className="p-3.5 rounded-xl bg-bg-surface border border-border-subtle flex items-start justify-between gap-3 hover:border-[#9d5ce6]/30 transition-all"
+                      className="p-3.5 rounded-xl bg-bg-surface border border-border-subtle flex items-start justify-between gap-3 hover:border-[#8B5CF6]/40 transition-all"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] uppercase tracking-wider text-[#9d5ce6] font-semibold mb-0.5">
+                        <div className="text-[11px] uppercase tracking-wider text-[#8B5CF6] font-semibold mb-0.5">
                           {step.heading}
                         </div>
                         <div className="text-xs sm:text-sm text-text-primary truncate">
-                          {val || <span className="text-text-tertiary italic">Not provided</span>}
+                          {val || <span className="text-text-tertiary">Not provided</span>}
                         </div>
                       </div>
                       <button
                         onClick={() => goToStep(idx)}
-                        className="text-xs text-text-tertiary hover:text-white px-2 py-1 rounded bg-bg-elevated hover:bg-[#9d5ce6]/20 transition-all cursor-pointer"
+                        className="text-xs text-text-tertiary hover:text-white px-2 py-1 rounded bg-bg-elevated hover:bg-[#8B5CF6]/20 transition-all cursor-pointer"
                       >
                         Edit
                       </button>
@@ -594,7 +594,7 @@ export function HeroSection() {
                   disabled={isSubmitting}
                   className="
                     w-full sm:w-auto px-7 py-3 rounded-xl font-medium text-sm sm:text-base
-                    bg-[#9d5ce6] text-white hover:bg-[#ad6ef8] hover:shadow-[0_0_20px_rgba(157,92,230,0.35)]
+                    bg-[#8B5CF6] text-white hover:bg-[#7C3AED] border border-[#8B5CF6]/40
                     active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2
                     disabled:opacity-50 disabled:cursor-not-allowed
                   "

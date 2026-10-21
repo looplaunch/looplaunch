@@ -105,13 +105,13 @@ export function WhatIsLoopLaunchSection() {
             {STRATEGY_STEPS.map((step) => (
               <StaggerItem key={step.num}>
                 <SpotlightCard
-                  className="p-5 sm:p-6 bg-bg-surface border border-border-subtle hover:border-[#8108ea]/40 transition-colors"
+                  className="p-5 sm:p-6 bg-bg-surface border border-border-subtle hover:border-[#8B5CF6]/40 transition-colors"
                   radius={320}
-                  surfaceGlow="rgba(0, 54, 125, 0.2)"
-                  borderGlow="rgba(129, 8, 234, 0.5)"
+                  surfaceGlow="rgba(255, 255, 255, 0.02)"
+                  borderGlow="rgba(139, 92, 246, 0.25)"
                 >
                   <div className="flex items-baseline gap-5 sm:gap-7">
-                    <span className="font-mono text-xs text-[#8108ea] font-semibold w-6">
+                    <span className="font-mono text-xs text-[#8B5CF6] font-semibold w-6">
                       {step.num}
                     </span>
                     <div className="flex-1">

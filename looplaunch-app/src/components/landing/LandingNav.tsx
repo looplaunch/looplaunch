@@ -71,11 +71,11 @@ export function LandingNav({ onGetStarted }: LandingNavProps) {
           />
         </div>
 
-        {/* Right CTA Button — Lighter, elegant violet button */}
+        {/* Right CTA Button */}
         <div className="flex items-center z-[52]">
           <button
             onClick={scrollToHero}
-            className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-[#9d5ce6] text-white hover:bg-[#ad6ef8] hover:shadow-[0_0_15px_rgba(157,92,230,0.35)] active:scale-95 transition-all cursor-pointer"
+            className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-[#8B5CF6] text-white hover:bg-[#7C3AED] border border-[#8B5CF6]/50 active:scale-95 transition-all cursor-pointer"
           >
             Get started
           </button>

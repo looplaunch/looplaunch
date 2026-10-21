@@ -9,33 +9,34 @@ interface MarkdownContentProps {
 }
 
 /**
- * Format inline text styles: bold, italic, code
+ * Format inline text styles: bold, inline code, and clean plain text (no decorative italics).
  */
 function renderInline(text: string): React.ReactNode[] {
-  // Regex to match **bold**, *italic*, `code`
+  // Regex to match **bold**, *emphasis*, `code`
   const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
   const parts = text.split(regex);
 
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
-        <strong key={i} className="font-semibold text-zinc-100">
+        <strong key={i} className="font-semibold text-[#F4F4F5]">
           {part.slice(2, -2)}
         </strong>
       );
     }
+    // Clean emphasis without decorative italic slant per design system
     if (part.startsWith("*") && part.endsWith("*")) {
       return (
-        <em key={i} className="italic text-zinc-200">
+        <span key={i} className="text-[#F4F4F5]">
           {part.slice(1, -1)}
-        </em>
+        </span>
       );
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
         <code
           key={i}
-          className="font-mono text-[12px] bg-zinc-800/80 text-zinc-200 px-1.5 py-0.5 rounded border border-zinc-700/50"
+          className="font-mono text-[12px] bg-[#17171B] text-[#F4F4F5] px-1.5 py-0.5 rounded border border-[#27272A]"
         >
           {part.slice(1, -1)}
         </code>
@@ -45,8 +46,14 @@ function renderInline(text: string): React.ReactNode[] {
   });
 }
 
-export function MarkdownContent({ content, className = "", animate = false }: MarkdownContentProps) {
-  const [displayedLength, setDisplayedLength] = useState<number>(animate ? 0 : content.length);
+export function MarkdownContent({
+  content,
+  className = "",
+  animate = false,
+}: MarkdownContentProps) {
+  const [displayedLength, setDisplayedLength] = useState<number>(
+    animate ? 0 : content.length
+  );
 
   useEffect(() => {
     if (!animate) {
@@ -58,9 +65,8 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
     const totalChars = content.length;
     let current = 0;
 
-    // Smooth typing stream simulation (like Gemini / ChatGPT)
+    // Smooth typing stream simulation
     const interval = setInterval(() => {
-      // Stream characters at variable speed (between 3 and 8 chars per tick)
       const step = Math.min(Math.floor(Math.random() * 6) + 4, totalChars - current);
       current += step;
       setDisplayedLength(current);
@@ -87,18 +93,30 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
   const isTyping = animate && displayedLength < content.length;
 
   return (
-    <div className={`space-y-3.5 text-zinc-300 text-[14.5px] leading-[1.68] font-normal ${className}`}>
+    <div
+      className={`space-y-3.5 text-[#D4D4D8] text-[14px] leading-[1.65] font-normal ${className}`}
+    >
       {blocks.map((block, idx) => {
         const trimmed = block.trim();
         if (!trimmed) return null;
         const isLastBlock = idx === blocks.length - 1;
 
+        // Horizontal rule
+        if (trimmed === "---" || trimmed === "***" || trimmed === "___") {
+          return <hr key={idx} className="border-t border-[#27272A] my-4" />;
+        }
+
         // Header 3
         if (trimmed.startsWith("### ")) {
           return (
-            <h4 key={idx} className="text-[15px] font-semibold text-zinc-100 pt-2 tracking-tight">
+            <h4
+              key={idx}
+              className="text-[15px] font-semibold text-[#F4F4F5] pt-2 tracking-tight"
+            >
               {renderInline(trimmed.replace(/^###\s+/, ""))}
-              {isLastBlock && isTyping && <span className="inline-block w-1.5 h-4 ml-1 bg-zinc-400 animate-pulse align-middle" />}
+              {isLastBlock && isTyping && (
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+              )}
             </h4>
           );
         }
@@ -106,9 +124,14 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
         // Header 2
         if (trimmed.startsWith("## ")) {
           return (
-            <h3 key={idx} className="text-[16px] font-semibold text-zinc-100 pt-2.5 tracking-tight">
+            <h3
+              key={idx}
+              className="text-[16px] font-semibold text-[#F4F4F5] pt-2.5 tracking-tight"
+            >
               {renderInline(trimmed.replace(/^##\s+/, ""))}
-              {isLastBlock && isTyping && <span className="inline-block w-1.5 h-4 ml-1 bg-zinc-400 animate-pulse align-middle" />}
+              {isLastBlock && isTyping && (
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+              )}
             </h3>
           );
         }
@@ -116,20 +139,27 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
         // Header 1
         if (trimmed.startsWith("# ")) {
           return (
-            <h2 key={idx} className="text-[17px] font-semibold text-zinc-50 pt-3 tracking-tight">
+            <h2
+              key={idx}
+              className="text-[18px] font-semibold text-[#F4F4F5] pt-3 tracking-tight"
+            >
               {renderInline(trimmed.replace(/^#\s+/, ""))}
-              {isLastBlock && isTyping && <span className="inline-block w-1.5 h-4 ml-1 bg-zinc-400 animate-pulse align-middle" />}
+              {isLastBlock && isTyping && (
+                <span className="inline-block w-1.5 h-4 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+              )}
             </h2>
           );
         }
 
-        // Blockquote
+        // Blockquote (clean, no italics)
         if (trimmed.startsWith("> ")) {
-          const quoteLines = trimmed.split("\n").map(l => l.replace(/^>\s?/, ""));
+          const quoteLines = trimmed
+            .split("\n")
+            .map((l) => l.replace(/^>\s?/, ""));
           return (
             <blockquote
               key={idx}
-              className="border-l-2 border-zinc-600 pl-3.5 italic text-zinc-400 my-2"
+              className="border-l-2 border-[#3F3F46] pl-3.5 py-1 text-[#A1A1AA] my-2 bg-[#111114]/40 rounded-r-md"
             >
               {quoteLines.map((line, li) => (
                 <p key={li}>{renderInline(line)}</p>
@@ -145,12 +175,12 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
 
         if (isBulletList) {
           return (
-            <ul key={idx} className="space-y-1.5 my-2 pl-1">
+            <ul key={idx} className="space-y-1.5 my-2 pl-0.5">
               {lines.map((l, li) => {
                 const itemText = l.replace(/^\s*[-*•]\s+/, "");
                 return (
                   <li key={li} className="flex items-start gap-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0 mt-2.5 opacity-70" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#71717A] shrink-0 mt-2 opacity-80" />
                     <span className="flex-1">{renderInline(itemText)}</span>
                   </li>
                 );
@@ -161,14 +191,14 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
 
         if (isNumberedList) {
           return (
-            <ol key={idx} className="space-y-1.5 my-2 pl-1">
+            <ol key={idx} className="space-y-1.5 my-2 pl-0.5">
               {lines.map((l, li) => {
                 const match = l.match(/^\s*(\d+)\.\s+(.*)/);
                 const num = match ? match[1] : `${li + 1}`;
                 const itemText = match ? match[2] : l;
                 return (
                   <li key={li} className="flex items-start gap-2.5">
-                    <span className="font-mono text-xs font-semibold text-zinc-400 shrink-0 mt-0.5 w-4 text-right">
+                    <span className="font-mono text-xs font-medium text-[#71717A] shrink-0 mt-0.5 w-4 text-right">
                       {num}.
                     </span>
                     <span className="flex-1">{renderInline(itemText)}</span>
@@ -183,7 +213,7 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
         const sublines = trimmed.split("\n");
         if (sublines.length > 1) {
           return (
-            <p key={idx} className="text-zinc-200">
+            <p key={idx} className="text-[#D4D4D8]">
               {sublines.map((line, li) => (
                 <React.Fragment key={li}>
                   {renderInline(line)}
@@ -191,17 +221,17 @@ export function MarkdownContent({ content, className = "", animate = false }: Ma
                 </React.Fragment>
               ))}
               {isLastBlock && isTyping && (
-                <span className="inline-block w-1.5 h-3.5 ml-1 bg-zinc-300 animate-pulse align-middle" />
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
               )}
             </p>
           );
         }
 
         return (
-          <p key={idx} className="text-zinc-200">
+          <p key={idx} className="text-[#D4D4D8]">
             {renderInline(trimmed)}
             {isLastBlock && isTyping && (
-              <span className="inline-block w-1.5 h-3.5 ml-1 bg-zinc-300 animate-pulse align-middle" />
+              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
             )}
           </p>
         );

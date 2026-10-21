@@ -122,9 +122,9 @@ export function StrategyOutputSection() {
 
         {/* Strategic Deliverable View with Spotlight Cursor Glow */}
         <SpotlightCard
-          radius={420}
-          surfaceGlow="rgba(0, 54, 125, 0.22)"
-          borderGlow="rgba(129, 8, 234, 0.55)"
+          radius={360}
+          surfaceGlow="rgba(255, 255, 255, 0.02)"
+          borderGlow="rgba(139, 92, 246, 0.25)"
           className={`
             border border-border-subtle bg-bg-surface rounded-xl overflow-hidden
             transition-all duration-700
@@ -137,7 +137,7 @@ export function StrategyOutputSection() {
           <div className="grid grid-cols-1 md:grid-cols-12 min-h-[460px]">
             {/* Left Nav */}
             <div className="md:col-span-4 border-b md:border-b-0 md:border-r border-border-subtle p-4 sm:p-6 space-y-1">
-              <div className="text-xs uppercase tracking-widest text-[#8108ea] font-semibold mb-4 px-3">
+              <div className="text-xs uppercase tracking-widest text-[#8B5CF6] font-semibold mb-4 px-3">
                 Deliverables
               </div>
               {STRATEGY_DELIVERABLES.map((item, idx) => (
@@ -147,7 +147,7 @@ export function StrategyOutputSection() {
                   className={`
                     w-full text-left px-3 py-2 rounded-lg text-sm transition-all cursor-pointer
                     ${activeTab === idx
-                      ? "text-white font-medium bg-[#1d0b2e] border-l-2 border-[#8108ea] shadow-[0_0_15px_rgba(129,8,234,0.15)]"
+                      ? "text-text-primary font-medium bg-bg-elevated border-l-2 border-[#8B5CF6]"
                       : "text-text-secondary hover:text-text-primary hover:bg-bg-elevated/40"
                     }
                   `}
@@ -182,7 +182,7 @@ export function StrategyOutputSection() {
                         key={i}
                         className="text-sm sm:text-base text-text-secondary flex items-baseline gap-3"
                       >
-                        <span className="text-[#8108ea] font-mono text-xs font-semibold">
+                        <span className="text-[#8B5CF6] font-mono text-xs font-semibold">
                           0{i + 1}
                         </span>
                         <span className="font-normal">{point}</span>

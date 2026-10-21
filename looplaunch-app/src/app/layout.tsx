@@ -1,13 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Sans } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { getSiteUrl, siteConfig } from "@/lib/seo";
 import "./globals.css";
-
-const instrumentSans = Instrument_Sans({
-  variable: "--font-instrument",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
 
 const siteUrl = getSiteUrl();
 
@@ -124,7 +119,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${instrumentSans.variable} h-full`}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}>
       <head>
         <script
           type="application/ld+json"

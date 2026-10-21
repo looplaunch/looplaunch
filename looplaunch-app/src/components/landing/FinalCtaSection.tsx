@@ -29,9 +29,9 @@ export function FinalCtaSection({ onGetStarted }: FinalCtaSectionProps) {
         <button
           onClick={onGetStarted}
           className="
-            px-8 py-3.5 rounded-full font-medium text-sm sm:text-base
-            bg-[#9d5ce6] text-white
-            hover:bg-[#ad6ef8] hover:shadow-[0_0_20px_rgba(157,92,230,0.35)] active:scale-95
+            px-7 py-3 rounded-xl font-medium text-sm sm:text-base
+            bg-[#8B5CF6] text-white border border-[#8B5CF6]/50
+            hover:bg-[#7C3AED] active:scale-95
             transition-all duration-150 whitespace-nowrap
             flex items-center justify-center gap-2 cursor-pointer
           "

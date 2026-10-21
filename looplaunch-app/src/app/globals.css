@@ -1,30 +1,24 @@
 @import "tailwindcss";
 
-/* ─── Design Tokens ─── */
+/* ─── Design Tokens (Strict Loop Launch Palette) ─── */
 :root {
-  --bg-primary: #000000;
-  --bg-surface: #0a0510;
-  --bg-elevated: #140920;
-  --bg-hover: #1d0d2e;
-  --border-subtle: #251238;
-  --border-focus: #8108ea;
-  --text-primary: #f9f5f2;
-  --text-secondary: #b8a6c4;
-  --text-tertiary: #756282;
-  --text-placeholder: #503d5c;
-  --accent: #8108ea;
-  --accent-purple: #8000a4;
-  --accent-violet: #8108ea;
-  --accent-blue: #00367d;
-  --accent-pink: #ff96fd;
-  --accent-gray: #d9d9d9;
-  --error: #EF4444;
+  --bg-primary: #09090B;
+  --bg-surface: #111114;
+  --bg-elevated: #17171B;
+  --bg-hover: #1F1F24;
+  --border-subtle: #27272A;
+  --border-focus: #3F3F46;
+  --border-hover: #3F3F46;
+  --text-primary: #F4F4F5;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+  --text-placeholder: #52525B;
 
-  /* ─── Button Theme Tokens (Configurable here) ─── */
-  --btn-purple: #9d5ce6;
-  --btn-purple-hover: #ad6ef8;
-  --btn-purple-text: #ffffff;
-  --btn-purple-glow: rgba(157, 92, 230, 0.28);
+  /* Semantic Accents */
+  --accent-purple: #8B5CF6;       /* 14-day roadmap and related actions */
+  --accent-yellow: #FACC15;       /* 7-day sprint and related actions */
+  --accent-green: #10B981;        /* Intelligence-ready and active indicators */
+  --error: #EF4444;
 
   --background: var(--bg-primary);
   --foreground: var(--text-primary);
@@ -39,20 +33,17 @@
   --color-bg-hover: var(--bg-hover);
   --color-border-subtle: var(--border-subtle);
   --color-border-focus: var(--border-focus);
+  --color-border-hover: var(--border-hover);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
   --color-text-placeholder: var(--text-placeholder);
-  --color-accent: var(--accent);
   --color-accent-purple: var(--accent-purple);
-  --color-accent-violet: var(--accent-violet);
-  --color-accent-blue: var(--accent-blue);
-  --color-accent-pink: var(--accent-pink);
-  --color-accent-gray: var(--accent-gray);
-  --color-btn-purple: var(--btn-purple);
-  --color-btn-purple-hover: var(--btn-purple-hover);
+  --color-accent-yellow: var(--accent-yellow);
+  --color-accent-green: var(--accent-green);
   --color-error: var(--error);
-  --font-sans: var(--font-instrument);
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
 }
 
 /* ─── Base ─── */
@@ -63,15 +54,15 @@
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-instrument), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* ─── Selection ─── */
 ::selection {
-  background: rgba(129, 8, 234, 0.35);
-  color: var(--text-primary);
+  background: rgba(139, 92, 246, 0.25);
+  color: #F4F4F5;
 }
 
 /* ─── Focus ─── */

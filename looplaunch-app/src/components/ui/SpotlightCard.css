@@ -1,10 +1,10 @@
 .spotlight-card {
   position: relative;
-  background-color: var(--bg-surface, #0a0510);
-  border-radius: 0.875rem;
-  border: 1px solid var(--border-subtle, #251238);
+  background-color: var(--bg-surface, #111114);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-subtle, #27272A);
   overflow: hidden;
-  transition: border-color 0.3s ease, transform 0.3s ease, background-color 0.3s ease;
+  transition: border-color 0.25s ease, background-color 0.25s ease;
 }
 
 /* Outer illuminated hairline border */
@@ -14,15 +14,15 @@
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: radial-gradient(var(--spotlight-radius, 350px) circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),
-      var(--border-glow, rgba(129, 8, 234, 0.5)),
+  background: radial-gradient(var(--spotlight-radius, 320px) circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),
+      var(--border-glow, rgba(139, 92, 246, 0.25)),
       transparent 65%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
   opacity: var(--spotlight-opacity, 0);
-  transition: opacity 0.3s ease;
+  transition: opacity 0.25s ease;
   z-index: 1;
 }
 
@@ -32,12 +32,12 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(var(--spotlight-radius, 350px) circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),
-      var(--surface-glow, rgba(0, 54, 125, 0.2)),
+  background: radial-gradient(var(--spotlight-radius, 320px) circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px),
+      var(--surface-glow, rgba(255, 255, 255, 0.02)),
       transparent 70%);
   pointer-events: none;
   opacity: var(--spotlight-opacity, 0);
-  transition: opacity 0.3s ease;
+  transition: opacity 0.25s ease;
   z-index: 1;
 }
 

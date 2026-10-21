@@ -76,13 +76,13 @@ export function StrategicIntelligenceSection() {
           {STAGES.map((stage) => (
             <StaggerItem key={stage.title} className="h-full">
               <SpotlightCard
-                className="h-full p-6 sm:p-7 bg-bg-surface hover:bg-bg-elevated border border-border-subtle hover:border-[#8108ea]/50 transition-colors flex flex-col justify-between"
+                className="h-full p-6 sm:p-7 bg-bg-surface hover:bg-bg-elevated border border-border-subtle hover:border-[#8B5CF6]/40 transition-colors flex flex-col justify-between"
                 radius={320}
-                surfaceGlow="rgba(0, 54, 125, 0.22)"
-                borderGlow="rgba(129, 8, 234, 0.55)"
+                surfaceGlow="rgba(255, 255, 255, 0.02)"
+                borderGlow="rgba(139, 92, 246, 0.25)"
               >
                 <div>
-                  <div className="text-xs font-mono text-[#8108ea] font-semibold mb-4">
+                  <div className="text-xs font-mono text-[#8B5CF6] font-semibold mb-4">
                     {stage.num}
                   </div>
                   <h3 className="text-xl font-medium tracking-tight text-text-primary mb-2">
