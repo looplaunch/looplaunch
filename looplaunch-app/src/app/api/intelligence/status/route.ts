@@ -40,6 +40,8 @@ export async function GET(request: Request) {
     hasDiagnosis: !!session.diagnosis,
     companyName: session.onboardingInput?.companyName || session.companyIntelligence?.name,
     messages: session.messages || [],
+    marketIntelligence: session.marketIntelligence,
+    competitorIntelligence: session.competitorIntelligence,
     error: session.error,
   };
 

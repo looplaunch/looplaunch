@@ -274,6 +274,8 @@ export interface StatusResponse {
   hasDiagnosis: boolean;
   companyName?: string;
   messages?: ChatMessage[];
+  marketIntelligence?: MarketIntelligence;
+  competitorIntelligence?: CompetitorIntelligence[];
   error?: string;
 }
 

@@ -28,6 +28,7 @@ import type {
   ChatMessage,
 } from "@/lib/intelligence/types";
 import { MarkdownContent } from "@/components/intelligence/MarkdownContent";
+import { IntelligenceSidebar } from "@/components/intelligence/IntelligenceSidebar";
 
 // ──────────────────────────────────────────────
 // Pipeline Stage Configuration
@@ -292,7 +293,7 @@ function IntelligencePageContent() {
       </header>
 
       {/* ─── Main Content Container ─── */}
-      <main className="flex-1 flex flex-col w-full max-w-3xl mx-auto px-4 sm:px-6">
+      <main className="flex-1 flex flex-col w-full max-w-6xl mx-auto px-4 sm:px-6">
         {/* ─── Pipeline Gathering State ─── */}
         <AnimatePresence>
           {isGathering && (
@@ -350,7 +351,8 @@ function IntelligencePageContent() {
 
         {/* ─── Conversational Stream / Initial Selection ─── */}
         {!isGathering && status?.status === "ready" && (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col lg:flex-row gap-6 pt-4 pb-24 items-start">
+            <div className="flex-1 flex flex-col w-full min-w-0">
             {messages.length === 0 ? (
               /* ─── Initial Strategy Selection Screen ─── */
               <div className="pt-10 sm:pt-14 pb-32 flex flex-col items-center text-center max-w-2xl mx-auto w-full">
@@ -679,6 +681,14 @@ function IntelligencePageContent() {
                 <div ref={bottomRef} />
               </div>
             )}
+            </div>
+
+            {/* Right Column: Live SerpApi Search & Ads Intelligence Sidebar */}
+            <IntelligenceSidebar
+              marketIntelligence={status.marketIntelligence}
+              competitorIntelligence={status.competitorIntelligence}
+              companyName={companyName}
+            />
           </div>
         )}
 
