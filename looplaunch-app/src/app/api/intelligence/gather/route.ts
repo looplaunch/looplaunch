@@ -101,8 +101,8 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
       }
     }
 
-    // ─── STAGE 3: Market Research (Tavily) ───
-    await updateStatus(sessionId, "researching_market", "Analyzing your market...");
+    // ─── STAGE 3: Market Research (Tavily + SerpApi) ───
+    await updateStatus(sessionId, "researching_market", "Analyzing market demand & competitor search footprint...");
     let marketResearchText = "";
     let rawTavilyResults: import("@/lib/intelligence/types").TavilySearchResult[] = [];
     try {
@@ -115,6 +115,39 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
       rawTavilyResults = allResults;
     } catch (e) {
       console.warn("[Pipeline] Market research failed:", e);
+    }
+
+    // Live SerpApi: Competitor Google Ads & Real search questions (PAA)
+    let serpAds: Array<{ title: string; link: string; snippet?: string; displayedLink?: string }> = [];
+    let serpQuestions: Array<{ question: string; snippet?: string; link?: string }> = [];
+    let serpKeywords: Array<{ position: number; title: string; link: string; snippet?: string }> = [];
+
+    try {
+      const primaryCompetitor = competitorNames[0];
+      const serpQuery = primaryCompetitor 
+        ? `${primaryCompetitor} alternatives`
+        : `${input.companyName || input.whatTheySell}`;
+        
+      const { searchGoogleIntelligence } = await import("@/lib/research/serpapi");
+      const serpData = await searchGoogleIntelligence(serpQuery);
+
+      if (serpData) {
+        serpAds = serpData.ads;
+        serpQuestions = serpData.peopleAlsoAsk;
+        serpKeywords = serpData.organicResults;
+
+        // Enhance Gemini's market research prompt with real Google search intent
+        if (serpQuestions.length > 0) {
+          const questionsSnippet = serpQuestions.map((q) => `• ${q.question}`).join("\n");
+          marketResearchText += `\n\n### Real Google Search Questions from Buyers:\n${questionsSnippet}`;
+        }
+        if (serpAds.length > 0) {
+          const adsSnippet = serpAds.map((ad) => `• [Ad] "${ad.title}" - ${ad.snippet}`).join("\n");
+          marketResearchText += `\n\n### Active Google Ads in Category:\n${adsSnippet}`;
+        }
+      }
+    } catch (e) {
+      console.warn("[Pipeline] SerpApi intelligence gathering non-fatal error:", e);
     }
 
     // ─── STAGE 4: Gemini — Analyze Company ───
@@ -137,14 +170,16 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     await updateSession(sessionId, { competitorIntelligence: competitorIntels });
 
     // ─── STAGE 6: Gemini — Analyze Market ───
-    // Raw Tavily results are stored on marketIntelligence.searchResults
-    // so they remain separate from Gemini's synthesized intelligence.
-    await updateStatus(sessionId, "analyzing_market", "Understanding market dynamics...");
+    // Raw Tavily results + SerpApi intelligence stored on marketIntelligence
+    await updateStatus(sessionId, "analyzing_market", "Understanding market dynamics & search demand...");
     const marketIntel = await analyzeMarket(input, marketResearchText);
     await updateSession(sessionId, {
       marketIntelligence: {
         ...marketIntel,
         searchResults: rawTavilyResults,
+        googleAds: serpAds,
+        peopleAlsoAsk: serpQuestions,
+        organicKeywords: serpKeywords,
       },
     });
 

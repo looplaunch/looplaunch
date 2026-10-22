@@ -90,6 +90,24 @@ export interface MarketIntelligence {
   opportunities: string[];
   threats: string[];
   searchResults?: TavilySearchResult[];
+  /** Live SerpApi Intelligence */
+  googleAds?: Array<{
+    title: string;
+    link: string;
+    snippet?: string;
+    displayedLink?: string;
+  }>;
+  peopleAlsoAsk?: Array<{
+    question: string;
+    snippet?: string;
+    link?: string;
+  }>;
+  organicKeywords?: Array<{
+    position: number;
+    title: string;
+    link: string;
+    snippet?: string;
+  }>;
 }
 
 export interface TavilySearchResult {

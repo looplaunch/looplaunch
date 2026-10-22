@@ -67,7 +67,32 @@ export async function GET() {
     }
   }
 
-  // 4. Check Crawl4AI
+  // 4. Check SerpApi
+  const serpKey = process.env.SERPAPI_API_KEY;
+  if (!serpKey) {
+    results.serpapi = {
+      status: "notice",
+      message: "SERPAPI_API_KEY not configured",
+    };
+  } else {
+    try {
+      const { searchGoogleIntelligence } = await import("@/lib/research/serpapi");
+      const testSearch = await searchGoogleIntelligence("marketing", { num: 1 });
+      results.serpapi = {
+        status: testSearch ? "ok" : "error",
+        message: testSearch
+          ? "SerpApi Google search intelligence is connected and active"
+          : "SerpApi request failed",
+      };
+    } catch (err) {
+      results.serpapi = {
+        status: "error",
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  // 5. Check Crawl4AI
   const crawlUrl = process.env.CRAWL4AI_URL;
   if (!crawlUrl) {
     results.crawl4ai = {
