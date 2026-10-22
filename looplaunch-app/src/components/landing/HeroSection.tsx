@@ -65,8 +65,9 @@ export function HeroSection() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (currentField && typeof data[currentField] === "string") {
-      setQuestionVal(data[currentField] as string);
+    if (currentField) {
+      const val = data[currentField];
+      setQuestionVal(typeof val === "string" ? val : "");
       setQuestionError("");
     }
     // Auto-focus input when step changes
