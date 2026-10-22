@@ -30,11 +30,11 @@ export async function GET() {
   } else {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
       const ping = await model.generateContent("ping");
       results.gemini = {
         status: ping.response.text() ? "ok" : "error",
-        message: "Gemini 2.0 Flash is connected and responding",
+        message: "Gemini 3.5 Flash Lite is connected and responding",
       };
     } catch (err) {
       results.gemini = {
