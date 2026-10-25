@@ -2,13 +2,12 @@
  * POST /api/intelligence/gather
  *
  * Main intelligence pipeline endpoint.
- * Receives onboarding data and orchestrates:
+ * Receives onboarding data (new 9-question format) and orchestrates:
  * 1. Crawl company website
- * 2. Crawl competitor websites
- * 3. Market research (Tavily)
- * 4. Gemini structuring (company, competitors, market)
- * 5. Strategic diagnosis
- * 6. Store everything in the intelligence store
+ * 2. Market research (Tavily)
+ * 3. Gemini structuring (company, competitors, market)
+ * 4. Strategic diagnosis
+ * 5. Store everything in the intelligence store
  *
  * Returns immediately with a sessionId.
  * Pipeline runs asynchronously — poll /api/intelligence/status for progress.
@@ -24,7 +23,6 @@ import {
 import {
   crawlWebsite,
   crawlResultToText,
-  crawlUrl,
 } from "@/lib/crawler/website-crawler";
 import {
   analyzeCompany,
@@ -35,24 +33,27 @@ import {
 import { runMarketResearch } from "@/lib/research/tavily";
 
 // ──────────────────────────────────────────────
-// Validation
+// Validation (updated for new 9-question format)
 // ──────────────────────────────────────────────
 
 function validateInput(body: unknown): OnboardingInput | null {
   if (!body || typeof body !== "object") return null;
   const data = body as Record<string, unknown>;
 
-  if (!data.companyName || typeof data.companyName !== "string") return null;
-  if (!data.whatTheySell || typeof data.whatTheySell !== "string") return null;
+  // Website is the only strictly required field
+  if (!data.website || typeof data.website !== "string") return null;
 
   return {
-    companyName: data.companyName as string,
-    nameAndRole: (data.nameAndRole as string) || "",
-    whatTheySell: (data.whatTheySell as string) || "",
-    website: (data.website as string) || "",
-    competitors: (data.competitors as string) || "",
-    painPoint: (data.painPoint as string) || "",
-    whyTheyreHere: Array.isArray(data.whyTheyreHere) ? data.whyTheyreHere as string[] : [],
+    website: data.website as string,
+    role: (data.role as string) || "",
+    industry: (data.industry as string) || "",
+    stage: (data.stage as string) || "",
+    coreOffer: (data.coreOffer as string) || "",
+    audience: Array.isArray(data.audience) ? data.audience as string[] : [],
+    salesChannels: Array.isArray(data.salesChannels) ? data.salesChannels as string[] : [],
+    biggestHeadache: (data.biggestHeadache as string) || "",
+    thirtyDayGoal: (data.thirtyDayGoal as string) || "",
+    companyName: (data.companyName as string) || undefined,
   };
 }
 
@@ -73,43 +74,30 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     }
     const companyText = crawlResultToText(companyCrawl);
 
-    // ─── STAGE 2: Crawl Competitor Websites ───
-    await updateStatus(sessionId, "crawling_competitors", "Researching your competitors...");
-    const competitorNames = input.competitors
-      .split(/[,\n]/)
-      .map((c) => c.trim())
-      .filter(Boolean);
+    // Extract company name from crawl if not provided
+    const derivedCompanyName =
+      input.companyName ||
+      (companyCrawl.pages?.[0]?.title
+        ? companyCrawl.pages[0].title.split(/[|\-–—]/)[0].trim()
+        : new URL(input.website).hostname.replace(/^www\./, "").split(".")[0]);
+    input.companyName = derivedCompanyName;
 
+    // ─── STAGE 2: Competitor Research (search-based, no user-supplied competitors) ───
+    await updateStatus(sessionId, "crawling_competitors", "Investigating competitive landscape...");
+    // In the new flow we don't ask for competitor URLs directly.
+    // We discover competitors via market research and SerpApi instead.
     const competitorCrawls: { name: string; text: string }[] = [];
-    for (const name of competitorNames.slice(0, 5)) {
-      try {
-        // If the name looks like a URL, crawl it directly
-        const isUrl = name.includes(".") && !name.includes(" ");
-        const url = isUrl
-          ? name.startsWith("http") ? name : `https://${name}`
-          : null;
-
-        if (url) {
-          const crawl = await crawlWebsite(url);
-          competitorCrawls.push({ name, text: crawlResultToText(crawl) });
-        } else {
-          competitorCrawls.push({ name, text: "" });
-        }
-      } catch (e) {
-        console.warn(`[Pipeline] Competitor crawl failed for ${name}:`, e);
-        competitorCrawls.push({ name, text: "" });
-      }
-    }
 
     // ─── STAGE 3: Market Research (Tavily + SerpApi) ───
     await updateStatus(sessionId, "researching_market", "Analyzing market demand & competitor search footprint...");
     let marketResearchText = "";
     let rawTavilyResults: import("@/lib/intelligence/types").TavilySearchResult[] = [];
     try {
+      const searchContext = `${input.coreOffer} ${input.industry}`;
       const { allResults, summaryText } = await runMarketResearch(
-        input.whatTheySell,
-        input.painPoint,
-        input.competitors
+        searchContext,
+        input.biggestHeadache,
+        "" // no explicit competitors in new flow
       );
       marketResearchText = summaryText;
       rawTavilyResults = allResults;
@@ -123,10 +111,7 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     let serpKeywords: Array<{ position: number; title: string; link: string; snippet?: string }> = [];
 
     try {
-      const primaryCompetitor = competitorNames[0];
-      const serpQuery = primaryCompetitor 
-        ? `${primaryCompetitor} alternatives`
-        : `${input.companyName || input.whatTheySell}`;
+      const serpQuery = `${input.industry} ${input.coreOffer} alternatives`;
         
       const { searchGoogleIntelligence } = await import("@/lib/research/serpapi");
       const serpData = await searchGoogleIntelligence(serpQuery);
@@ -155,7 +140,7 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     const companyIntel = await analyzeCompany(input, companyText);
     await updateSession(sessionId, { companyIntelligence: companyIntel });
 
-    // ─── STAGE 5: Gemini — Analyze Competitors ───
+    // ─── STAGE 5: Gemini — Analyze Competitors (from search results) ───
     await updateStatus(sessionId, "analyzing_competitors", "Analyzing competitive landscape...");
     const companyContext = `${companyIntel.name}: ${companyIntel.description}. Value prop: ${companyIntel.valueProposition}`;
     const competitorIntels = [];
@@ -170,7 +155,6 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     await updateSession(sessionId, { competitorIntelligence: competitorIntels });
 
     // ─── STAGE 6: Gemini — Analyze Market ───
-    // Raw Tavily results + SerpApi intelligence stored on marketIntelligence
     await updateStatus(sessionId, "analyzing_market", "Understanding market dynamics & search demand...");
     const marketIntel = await analyzeMarket(input, marketResearchText);
     await updateSession(sessionId, {
@@ -218,7 +202,7 @@ export async function POST(request: Request) {
 
     if (!input) {
       return NextResponse.json(
-        { error: "Invalid input. 'website' and 'companyDescription' are required." },
+        { error: "Invalid input. 'website' is required." },
         { status: 400 }
       );
     }

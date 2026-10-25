@@ -132,7 +132,8 @@ export async function POST(request: Request) {
       priorHistory,
       session.conversationSummary,
       analysis,
-      framework.formattedContext
+      framework.formattedContext,
+      session.onboardingInput
     );
 
     // ─── STEP 5: Add Assistant Response to Persistent History ───

@@ -10,13 +10,26 @@
 // ──────────────────────────────────────────────
 
 export interface OnboardingInput {
-  companyName: string;
-  nameAndRole: string;
-  whatTheySell: string;
+  /** Q1: Website or primary page URL */
   website: string;
-  competitors: string;
-  painPoint: string;
-  whyTheyreHere: string[];
+  /** Q2: Role in the brand */
+  role: string;
+  /** Q3: Industry */
+  industry: string;
+  /** Q4: Business stage */
+  stage: string;
+  /** Q5: Core offer / product description */
+  coreOffer: string;
+  /** Q6: Who buys from you (up to 2) */
+  audience: string[];
+  /** Q7: Where do you sell (all that apply) */
+  salesChannels: string[];
+  /** Q8: Biggest marketing headache */
+  biggestHeadache: string;
+  /** Q9: 30-day goal */
+  thirtyDayGoal: string;
+  /** Derived: Company name extracted from website / crawl */
+  companyName?: string;
 }
 
 // ──────────────────────────────────────────────

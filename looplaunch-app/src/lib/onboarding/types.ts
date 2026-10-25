@@ -3,51 +3,120 @@
  * This object is collected during onboarding and will eventually
  * be sent to the backend analysis pipeline.
  *
- * Updated to match founder's spec (Sep 2026).
+ * Updated to match founder's 9-question spec (Oct 2026).
  */
 export interface OnboardingData {
-  companyName: string;
-  nameAndRole: string;
-  whatTheySell: string;
+  /** Q1: Website or primary page URL */
   website: string;
-  competitors: string;
-  painPoint: string;
-  whyTheyreHere: string[];  // multi-select options
+  /** Q2: What hat are you wearing for this brand? (single-select) */
+  role: string;
+  /** Q3: Which industry are you in? (single-select) */
+  industry: string;
+  /** Q4: What stage are you at? (single-select) */
+  stage: string;
+  /** Q5: What's your core offer or product in a nutshell? (free text) */
+  coreOffer: string;
+  /** Q6: Who buys from you? (multi-select, up to 2) */
+  audience: string[];
+  /** Q7: Where do you sell? (multi-select, pick all that apply) */
+  salesChannels: string[];
+  /** Q8: Biggest marketing headache right now? (single-select) */
+  biggestHeadache: string;
+  /** Q9: What do you want in the next 30 days? (single-select) */
+  thirtyDayGoal: string;
 }
 
 export const EMPTY_ONBOARDING: OnboardingData = {
-  companyName: "",
-  nameAndRole: "",
-  whatTheySell: "",
   website: "",
-  competitors: "",
-  painPoint: "",
-  whyTheyreHere: [],
+  role: "",
+  industry: "",
+  stage: "",
+  coreOffer: "",
+  audience: [],
+  salesChannels: [],
+  biggestHeadache: "",
+  thirtyDayGoal: "",
 };
 
-/**
- * "Why they're here" options — these quietly show everything Loopy can do.
- */
-export const WHY_HERE_OPTIONS = [
-  "Test if my marketing is even working",
-  "Find where I'm burning money",
-  "Know what to do this month",
-  "Find an angle my competitors are missing",
-  "Get content ideas that fit my plan",
-  "Get a second opinion before I spend or hire more",
+// ──────────────────────────────────────────────
+// Option arrays for select-based questions
+// ──────────────────────────────────────────────
+
+export const ROLE_OPTIONS = [
+  "Founder / Co-founder",
+  "Solo Marketer",
+  "Agency",
+  "Team Member",
 ];
 
-/**
- * Step definitions for the onboarding flow.
- */
+export const INDUSTRY_OPTIONS = [
+  "Fashion & Apparel",
+  "Beauty & Skincare",
+  "Food & Beverage",
+  "Health & Fitness",
+  "Home & Decor",
+  "Tech & SaaS",
+  "Education & Coaching",
+  "Jewelry & Accessories",
+  "Services & Freelancing",
+  "Other",
+];
+
+export const STAGE_OPTIONS = [
+  "Idea",
+  "Just launched",
+  "Under 1 year selling",
+  "1 to 3 years",
+  "3+ years",
+];
+
+export const AUDIENCE_OPTIONS = [
+  "Gen Z",
+  "Young professionals",
+  "Parents",
+  "Premium buyers",
+  "Budget buyers",
+  "Other businesses",
+];
+
+export const SALES_CHANNEL_OPTIONS = [
+  "Instagram / DMs",
+  "Own website",
+  "Marketplaces",
+  "Offline store",
+  "WhatsApp",
+];
+
+export const HEADACHE_OPTIONS = [
+  "I sound like everyone else",
+  "I don't know what to post",
+  "Posting but no sales",
+  "Can't explain why I'm different",
+  "Paid for help and got generic stuff",
+];
+
+export const THIRTY_DAY_GOAL_OPTIONS = [
+  "More followers",
+  "More sales",
+  "A launch or drop",
+  "A clearer brand",
+  "More leads",
+];
+
+// ──────────────────────────────────────────────
+// Step definitions for the onboarding flow
+// ──────────────────────────────────────────────
+
 export type StepKey =
-  | "companyName"
-  | "nameAndRole"
-  | "whatTheySell"
   | "website"
-  | "competitors"
-  | "painPoint"
-  | "whyTheyreHere"
+  | "role"
+  | "industry"
+  | "stage"
+  | "coreOffer"
+  | "audience"
+  | "salesChannels"
+  | "biggestHeadache"
+  | "thirtyDayGoal"
   | "review";
 
 export interface StepConfig {
@@ -57,89 +126,96 @@ export interface StepConfig {
   heading: string;
   subtext: string;
   placeholder?: string;
-  inputType: "text" | "textarea" | "multiselect";
+  /** Input rendering type */
+  inputType: "text" | "textarea" | "singleselect" | "multiselect";
+  /** For multiselect: max number of selections allowed (undefined = unlimited) */
+  maxSelections?: number;
   optional?: boolean;
   skipLabel?: string;
 }
 
 export const STEPS: StepConfig[] = [
   {
-    key: "companyName",
-    number: 1,
-    field: "companyName",
-    heading: "What's your company called?",
-    subtext:
-      "Let's start with the basics.",
-    placeholder: "e.g. Acme Corp",
-    inputType: "text",
-  },
-  {
-    key: "nameAndRole",
-    number: 2,
-    field: "nameAndRole",
-    heading: "What's your name and role?",
-    subtext:
-      "So we know who we're talking to.",
-    placeholder: "e.g. Priya Sharma, Co-founder",
-    inputType: "text",
-  },
-  {
-    key: "whatTheySell",
-    number: 3,
-    field: "whatTheySell",
-    heading: "What do you sell, and who buys it?",
-    subtext:
-      "Keep it simple — one or two lines is plenty.",
-    placeholder:
-      "e.g. We sell project management software to small marketing agencies.",
-    inputType: "textarea",
-  },
-  {
     key: "website",
-    number: 4,
+    number: 1,
     field: "website",
-    heading: "What's your website?",
+    heading: "Drop your website or primary page below.",
     subtext:
-      "Drop your link so Loop Launch can start understanding your business.",
+      "We'll crawl it to understand your brand, products, and messaging.",
     placeholder: "yourcompany.com",
     inputType: "text",
   },
   {
-    key: "competitors",
+    key: "role",
+    number: 2,
+    field: "role",
+    heading: "What hat are you wearing for this brand?",
+    subtext: "This helps us tailor the strategy to your day-to-day.",
+    inputType: "singleselect",
+  },
+  {
+    key: "industry",
+    number: 3,
+    field: "industry",
+    heading: "Which industry are you in?",
+    subtext: "Pick one — we'll dial in the strategy for your space.",
+    inputType: "singleselect",
+  },
+  {
+    key: "stage",
+    number: 4,
+    field: "stage",
+    heading: "What stage are you at?",
+    subtext: "Where you are changes what you should focus on first.",
+    inputType: "singleselect",
+  },
+  {
+    key: "coreOffer",
     number: 5,
-    field: "competitors",
-    heading: "Who are your competitors?",
-    subtext:
-      "Name up to 3 companies you think you're competing with. If you're not sure, skip this.",
-    placeholder: "e.g.\nCompetitor A\nCompetitor B\ncompetitor.com",
-    inputType: "textarea",
-    optional: true,
-    skipLabel: "I'm not sure yet",
-  },
-  {
-    key: "painPoint",
-    number: 6,
-    field: "painPoint",
-    heading: "What's actually bugging you right now?",
-    subtext:
-      "A line or two on the marketing problem that brought you here.",
+    field: "coreOffer",
+    heading: "What's your core offer or product in a nutshell?",
+    subtext: "Keep it simple — one or two lines is plenty.",
     placeholder:
-      "e.g. We're spending on ads but have no idea if they're working. Leads are inconsistent.",
+      "e.g. We sell handmade linen shirts for men who want comfort without trying.",
     inputType: "textarea",
   },
   {
-    key: "whyTheyreHere",
+    key: "audience",
+    number: 6,
+    field: "audience",
+    heading: "Who buys from you?",
+    subtext: "Pick up to 2 — who's on the receiving end of your offer?",
+    inputType: "multiselect",
+    maxSelections: 2,
+  },
+  {
+    key: "salesChannels",
     number: 7,
-    field: "whyTheyreHere",
-    heading: "Why are you here?",
-    subtext:
-      "Pick everything that applies — this helps us focus on what matters to you.",
+    field: "salesChannels",
+    heading: "Where do you sell?",
+    subtext: "Pick all that apply.",
     inputType: "multiselect",
   },
   {
-    key: "review",
+    key: "biggestHeadache",
     number: 8,
-    heading: "Here's what we know so far.",
+    field: "biggestHeadache",
+    heading: "What's your biggest marketing headache right now?",
+    subtext: "Pick the one that stings the most.",
+    inputType: "singleselect",
+  },
+  {
+    key: "thirtyDayGoal",
+    number: 9,
+    field: "thirtyDayGoal",
+    heading: "What do you want in the next 30 days?",
+    subtext: "Pick one — this is what we'll build your week around.",
+    inputType: "singleselect",
+  },
+  {
+    key: "review",
+    number: 10,
+    heading: "Here's what we have so far.",
     subtext: "Review your answers and edit anything you'd like to change.",
     inputType: "text", // unused for review
   },

@@ -4,6 +4,8 @@
  * All prompts are separated from logic for easy iteration.
  * Gemini is used for STRUCTURING and REASONING, not as a primary data source.
  * Raw evidence comes from crawling and research — Gemini organizes and interprets it.
+ *
+ * Updated for the 9-question onboarding flow (Oct 2026).
  */
 
 import type { OnboardingInput, ChatMessage } from "../intelligence/types";
@@ -21,13 +23,16 @@ export function buildCompanyAnalysisPrompt(
 TASK: Analyze the following company data and produce a STRUCTURED intelligence profile.
 
 ═══ USER-PROVIDED CONTEXT ═══
-Company Name: ${onboarding.companyName}
-Contact: ${onboarding.nameAndRole}
 Website: ${onboarding.website}
-What They Sell & Who Buys It: ${onboarding.whatTheySell}
-Competitors: ${onboarding.competitors || "Not specified"}
-Pain Point: ${onboarding.painPoint}
-Why They're Here: ${onboarding.whyTheyreHere?.join(", ") || "Not specified"}
+Role: ${onboarding.role || "Not specified"}
+Industry: ${onboarding.industry || "Not specified"}
+Stage: ${onboarding.stage || "Not specified"}
+Core Offer: ${onboarding.coreOffer || "Not specified"}
+Target Audience: ${onboarding.audience?.join(", ") || "Not specified"}
+Sales Channels: ${onboarding.salesChannels?.join(", ") || "Not specified"}
+Biggest Headache: ${onboarding.biggestHeadache || "Not specified"}
+30-Day Goal: ${onboarding.thirtyDayGoal || "Not specified"}
+Company Name (derived): ${onboarding.companyName || "Unknown"}
 
 ═══ CRAWLED WEBSITE CONTENT ═══
 ${crawledContent || "No website content was crawled successfully."}
@@ -56,6 +61,7 @@ RULES:
 - Where crawled content is thin, supplement with the user's description
 - Be specific and actionable, not generic
 - Identify AT LEAST 3 strengths and 3 weaknesses
+- The user's stated audience (${onboarding.audience?.join(", ")}) and channels (${onboarding.salesChannels?.join(", ")}) should be reflected in targetSegments and currentChannels
 - Return ONLY the JSON object, no markdown fences or extra text`;
 }
 
@@ -116,10 +122,13 @@ export function buildMarketAnalysisPrompt(
 TASK: Analyze market data and produce a STRUCTURED market intelligence report.
 
 ═══ COMPANY CONTEXT ═══
-Company: ${onboarding.companyName}
-What They Sell: ${onboarding.whatTheySell}
-Pain Point: ${onboarding.painPoint}
-Why They're Here: ${onboarding.whyTheyreHere?.join(", ") || "Not specified"}
+Company: ${onboarding.companyName || "Unknown"}
+Industry: ${onboarding.industry || "Not specified"}
+Core Offer: ${onboarding.coreOffer || "Not specified"}
+Target Audience: ${onboarding.audience?.join(", ") || "Not specified"}
+Stage: ${onboarding.stage || "Not specified"}
+Biggest Headache: ${onboarding.biggestHeadache || "Not specified"}
+30-Day Goal: ${onboarding.thirtyDayGoal || "Not specified"}
 
 ═══ RESEARCH DATA ═══
 ${searchResults || "No market research data was gathered. Use general industry knowledge to provide baseline analysis."}
@@ -141,7 +150,7 @@ Produce a JSON object with this exact structure:
 
 RULES:
 - Clearly distinguish between data-backed insights and inferences
-- Focus on trends relevant to the company's target audience
+- Focus on trends relevant to the company's target audience (${onboarding.audience?.join(", ")})
 - Be specific — avoid generic marketing jargon
 - Return ONLY the JSON object, no markdown fences or extra text`;
 }
@@ -169,11 +178,15 @@ ${competitorIntel}
 ═══ MARKET INTELLIGENCE ═══
 ${marketIntel}
 
-═══ USER'S PAIN POINT ═══
-${onboarding.painPoint}
-
-═══ WHY THEY'RE HERE ═══
-${onboarding.whyTheyreHere?.join(", ") || "Not specified"}
+═══ USER'S ONBOARDING ANSWERS ═══
+Role: ${onboarding.role || "Not specified"}
+Industry: ${onboarding.industry || "Not specified"}
+Stage: ${onboarding.stage || "Not specified"}
+Core Offer: ${onboarding.coreOffer || "Not specified"}
+Target Audience: ${onboarding.audience?.join(", ") || "Not specified"}
+Sales Channels: ${onboarding.salesChannels?.join(", ") || "Not specified"}
+Biggest Headache: ${onboarding.biggestHeadache || "Not specified"}
+30-Day Goal: ${onboarding.thirtyDayGoal || "Not specified"}
 
 ═══ INSTRUCTIONS ═══
 Produce a comprehensive strategic diagnosis as a JSON object:
@@ -217,7 +230,9 @@ RULES:
 - Don't generate a marketing plan — this is a DIAGNOSIS, not a prescription
 - Be direct and specific — avoid platitudes
 - Prioritize actionable insights over comprehensive coverage
-- Channel recommendations should account for the user's stated constraints
+- Channel recommendations should prioritize the channels the user already sells on: ${onboarding.salesChannels?.join(", ")}
+- The diagnosis should directly address their biggest headache: "${onboarding.biggestHeadache}"
+- Strategy should be calibrated for their stage: "${onboarding.stage}"
 - Return ONLY the JSON object, no markdown fences or extra text`;
 }
 
@@ -231,6 +246,7 @@ export interface ConversationalPromptOptions {
   competitorIntel: any[];
   marketIntel: any;
   diagnosis: any;
+  onboardingInput?: OnboardingInput;
   history?: ChatMessage[];
   conversationSummary?: string;
   researchText?: string;
@@ -245,6 +261,8 @@ export interface ConversationalPromptOptions {
  *
  * Produces continuous, context-aware dialogue that connects every new question
  * with preceding discussion, company intelligence, and optional web research.
+ *
+ * Now deeply aware of the 9 onboarding answers to produce hyper-personalized strategy.
  */
 export function buildConversationalAdvisorPrompt(options: ConversationalPromptOptions): string {
   const {
@@ -253,6 +271,7 @@ export function buildConversationalAdvisorPrompt(options: ConversationalPromptOp
     competitorIntel,
     marketIntel,
     diagnosis,
+    onboardingInput,
     history = [],
     conversationSummary,
     researchText,
@@ -302,12 +321,27 @@ ${researchText}
     ? `\n[Advisory Directive: ${intentGuidance}]\n`
     : "";
 
+  // Build onboarding context block (deeply woven into the prompt)
+  const onboardingBlock = onboardingInput
+    ? `═══ CLIENT ONBOARDING PROFILE (USE THIS TO PERSONALIZE EVERYTHING) ═══
+Role: ${onboardingInput.role || "Not specified"} — tailor complexity and language accordingly
+Industry: ${onboardingInput.industry || "Not specified"}
+Stage: ${onboardingInput.stage || "Not specified"} — calibrate ambition and risk accordingly
+Core Offer: ${onboardingInput.coreOffer || "Not specified"}
+Target Audience: ${onboardingInput.audience?.join(", ") || "Not specified"} — all content and channel recommendations MUST speak to these people
+Sales Channels: ${onboardingInput.salesChannels?.join(", ") || "Not specified"} — focus strategy on these channels
+Biggest Headache: ${onboardingInput.biggestHeadache || "Not specified"} — this is the #1 problem to solve
+30-Day Goal: ${onboardingInput.thirtyDayGoal || "Not specified"} — every recommendation should ladder up to this
+
+`
+    : "";
+
   return `You are the Chief Strategy Officer and Lead Marketing Advisor at Loop Launch. You are in an ONGOING, collaborative strategic advisory conversation with the company founder/executive.
 
 ${summaryBlock}═══ CONVERSATION HISTORY (Previous turns in this session) ═══
 ${historyText}
 
-${frameworkSection}${webResearchSection}
+${onboardingBlock}${frameworkSection}${webResearchSection}
 ═══ AUTHORITATIVE COMPANY INTELLIGENCE BASE ═══
 Company: ${companyIntel.name} (${companyIntel.website || "N/A"})
 Core Focus: ${companyIntel.description}
@@ -328,7 +362,15 @@ ${referenceNote}${intentNote}
    - If the "LOOP LAUNCH PROPRIETARY FRAMEWORK" section above contains relevant principles, frameworks, loops, or heuristics, prioritize applying them directly to the client's problem.
    - Mention the framework terminology and principles naturally without reading like a textbook.
 
-2. **CONTINUITY IS MANDATORY**:
+2. **USE THE ONBOARDING ANSWERS DEEPLY**:
+   - The client's biggest headache ("${onboardingInput?.biggestHeadache || "not specified"}") should be the #1 problem your strategy addresses.
+   - Their 30-day goal ("${onboardingInput?.thirtyDayGoal || "not specified"}") should be the north star for every recommendation.
+   - Their audience (${onboardingInput?.audience?.join(", ") || "not specified"}) determines the tone, hooks, and platforms you recommend.
+   - Their sales channels (${onboardingInput?.salesChannels?.join(", ") || "not specified"}) determine WHERE the strategy lives.
+   - Their stage ("${onboardingInput?.stage || "not specified"}") determines the ambition level and risk tolerance.
+   - Their role ("${onboardingInput?.role || "not specified"}") determines the level of detail and delegation advice.
+
+3. **CONTINUITY IS MANDATORY**:
    - Understand the current question in relation to the conversation history above.
    - If the user asks "Why?", explain the causal mechanism behind the statement you made in the previous message.
    - If the user asks "How do we fix it?", provide concrete operational steps for the specific problem discussed above.
@@ -336,15 +378,28 @@ ${referenceNote}${intentNote}
    - If the user tests a pivot ("What if we target SMBs instead?"), re-evaluate the strategy under that scenario and contrast it with previous points.
    - NEVER repeat your prior answers. Build forward.
 
-3. **CONCISE & DIRECT BY DEFAULT**:
+4. **CONCISE & DIRECT BY DEFAULT**:
    - DO NOT generate a 500-word boilerplate consulting report.
    - Answer the actual question that was asked. A simple question deserves a crisp, 1-3 paragraph answer or focused bullets.
    - Use natural transitions ("The catch is...", "That changes the economics.", "Looking at your customer acquisition cost...", "The underlying reason is...").
    - Avoid generic intros like "Based on the available intelligence..." or "In conclusion...". Jump straight to the insight.
 
-4. **SPRINT STRATEGY & VIDEO CONTENT RULE**:
+5. **SPRINT STRATEGY & 7-DAY PLAN RULE**:
    - If the client requests a "7-Day Strategy" or "14-Day Strategy":
-     - Deliver an ultra-actionable day-by-day (or phase-by-phase) execution blueprint tailored specifically to their company, ICP, offer, and pain points.
+     - **CRITICAL: You MUST start with a "7 DAYS" section** formatted as a day-by-day breakdown (MON through SUN) with one actionable task per day. Each task should be a short, punchy instruction (one line, no fluff). Format:
+       \`\`\`
+       ## 7 DAYS
+
+       **MON** — [Action]
+       **TUE** — [Action]
+       **WED** — [Action]
+       **THU** — [Action]
+       **FRI** — [Action]
+       **SAT** — [Action]
+       **SUN** — [Action]
+       \`\`\`
+     - AFTER the 7-day breakdown, provide the full detailed strategy with explanations, hooks, formats, exact steps.
+     - The strategy must be tailored to their core offer ("${onboardingInput?.coreOffer || "their product"}"), their audience (${onboardingInput?.audience?.join(", ") || "their buyers"}), their channels (${onboardingInput?.salesChannels?.join(", ") || "their platforms"}), and their 30-day goal ("${onboardingInput?.thirtyDayGoal || "growth"}").
      - Keep it highly practical (channels, hooks, formats, exact steps).
      - **CRITICAL REQUIREMENT FOR REELS / TIKTOKS**: If your strategy recommends or mentions creating TikToks, Instagram Reels, YouTube Shorts, or short-form videos:
        - You MUST explicitly conclude your response by asking:
@@ -359,11 +414,19 @@ ${referenceNote}${intentNote}
        • **Visual Action / B-roll**: What to record or demonstrate.
        • **High-Converting CTA**: How to drive them from the video to their website/DM/lead form.
 
-5. **SELECTIVE EVIDENCE**:
+6. **STOP / START SECTION**:
+   - When generating a strategy, include a "STOP / START" section:
+     - **STOP**: 2-3 things they should stop doing immediately (based on their headache and current approach)
+     - **START**: 2-3 things they should start doing immediately
+
+7. **KPI & KILL SIGNAL**:
+   - End every strategy with a clear KPI to track and a "kill signal" — a metric threshold that means the approach isn't working and they should pivot.
+
+8. **SELECTIVE EVIDENCE**:
    - Only include the "evidence" array when you make specific factual claims that benefit from verification (e.g. market share percentages, competitor pricing, customer behavior data).
    - For logical follow-ups ("Why?", "What if?", "Give me 3 ideas"), leave evidence empty or omit it. Do not force fake evidence blocks on conversational thoughts.
 
-6. **OUTPUT FORMAT (Strict JSON)**:
+9. **OUTPUT FORMAT (Strict JSON)**:
 Return a valid JSON object matching this schema:
 {
   "answer": "Your direct, context-aware strategic response formatted in clean markdown (paragraphs, bold text, or lists).",
@@ -433,4 +496,3 @@ export function buildQuestionAnswerPrompt(
     });
   }
 }
-

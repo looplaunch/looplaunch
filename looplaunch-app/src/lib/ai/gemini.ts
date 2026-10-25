@@ -89,24 +89,24 @@ function getMockCompanyIntelligence(
   _crawledContent: string
 ): CompanyIntelligence {
   const name = onboarding.companyName || "Your Company";
-  const sell = onboarding.whatTheySell || "High-performance software and tools";
-  const pain = onboarding.painPoint || "Scaling customer acquisition and market differentiation";
+  const sell = onboarding.coreOffer || "High-performance products and services";
+  const pain = onboarding.biggestHeadache || "Scaling customer acquisition and market differentiation";
 
   return {
     name,
     website: onboarding.website || "https://looplaunch.co",
-    industry: "B2B Software / AI Intelligence",
+    industry: onboarding.industry || "B2B Software / AI Intelligence",
     description: `${name} builds ${sell}. Tailored to solve critical bottlenecks in ${pain}.`,
-    valueProposition: `Accelerating growth and efficiency with high-leverage tooling built for ${sell}.`,
+    valueProposition: `Accelerating growth and efficiency with high-leverage positioning built for ${sell}.`,
     products: [
       sell,
       "Intelligent workflow orchestration",
       "Strategic performance analytics",
     ],
     targetSegments: [
-      onboarding.nameAndRole ? `Leaders in roles like ${onboarding.nameAndRole}` : "Founders and growth operators",
-      "B2B software teams seeking higher velocity",
-      "Modern agile companies outgrowing legacy tooling",
+      onboarding.role ? `Operators in roles like ${onboarding.role}` : "Founders and growth operators",
+      ...(onboarding.audience && onboarding.audience.length > 0 ? onboarding.audience : ["Target customers in industry"]),
+      "Modern agile companies outgrowing legacy approaches",
     ],
     brandTone: "Sharp, forward-thinking, pragmatic, and outcome-oriented",
     strengths: [
@@ -181,8 +181,8 @@ function getMockCompetitorIntelligence(
 }
 
 function getMockMarketIntelligence(onboarding: OnboardingInput): MarketIntelligence {
-  const sell = onboarding.whatTheySell || "modern software";
-  const pain = onboarding.painPoint || "market differentiation and customer acquisition";
+  const sell = onboarding.coreOffer || "modern products";
+  const pain = onboarding.biggestHeadache || "market differentiation and customer acquisition";
 
   return {
     industryOverview: `The market for ${sell} is undergoing a fundamental shift from bloated legacy suites toward agile, intelligent specialists that eliminate ${pain}.`,
@@ -226,7 +226,7 @@ function getMockDiagnosis(
   companyIntel: CompanyIntelligence,
   onboarding: OnboardingInput
 ): StrategicDiagnosis {
-  const constraint = onboarding.painPoint || "Top-of-funnel customer acquisition and positioning clarity";
+  const constraint = onboarding.biggestHeadache || "Top-of-funnel customer acquisition and positioning clarity";
 
   return {
     swot: {
@@ -613,7 +613,8 @@ export async function answerQuestion(
   history: ChatMessage[] = [],
   conversationSummary?: string,
   analysis?: QueryAnalysis,
-  frameworkContext?: string
+  frameworkContext?: string,
+  onboardingInput?: OnboardingInput
 ): Promise<StrategicAnswer> {
   const model = getModel();
 
@@ -666,6 +667,7 @@ Content: ${r.content}`
       competitorIntel,
       marketIntel,
       diagnosis,
+      onboardingInput,
       history,
       conversationSummary,
       researchText: researchSummaryText,
