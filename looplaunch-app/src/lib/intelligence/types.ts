@@ -63,10 +63,14 @@ export interface CompanyIntelligence {
   name: string;
   website: string;
   industry: string;
+  subIndustry?: string;
   description: string;
   valueProposition: string;
   products: string[];
+  businessModel?: string;
   targetSegments: string[];
+  geography?: string;
+  pricingAndPositioning?: string;
   brandTone: string;
   strengths: string[];
   weaknesses: string[];
@@ -74,11 +78,80 @@ export interface CompanyIntelligence {
   contentThemes: string[];
   technologyStack: string[];
   rawCrawlData?: CrawlResult;
+  /** Confidence score (0.0 to 1.0) for extracted attributes */
+  attributeConfidence?: Record<string, number>;
+  /** Exact quote evidence from the crawled website */
+  evidenceSnippets?: Record<string, string>;
+}
+
+export type CompetitorCategory =
+  | "direct"
+  | "indirect"
+  | "marketplace"
+  | "publisher"
+  | "irrelevant";
+
+export interface CompetitorScoreBreakdown {
+  productSimilarity: number; // 0 - 30
+  audienceOverlap: number; // 0 - 20
+  businessModel: number; // 0 - 15
+  geography: number; // 0 - 10
+  searchIntent: number; // 0 - 15
+  pricingPosition: number; // 0 - 10
+}
+
+export interface AdvertiserAdCreative {
+  id: string;
+  advertiser: string;
+  advertiserId?: string;
+  targetDomain: string;
+  format: "text" | "image" | "video";
+  image?: string;
+  video?: string;
+  body?: string;
+  firstShown?: string;
+  lastShown?: string;
+  detailsLink?: string;
+}
+
+export interface KeywordAdResult {
+  id: string;
+  position: number;
+  blockPosition?: "top" | "bottom";
+  title: string;
+  link: string;
+  displayedLink?: string;
+  trackingLink?: string;
+  snippet?: string;
+  advertiserName?: string;
+  sitelinks?: { title: string; link: string }[];
+  query: string;
+  location: string;
+  collectedAt: string;
+}
+
+export interface ShoppingProduct {
+  position: number;
+  title: string;
+  price?: string;
+  source?: string;
+  link: string;
+  rating?: number;
+  reviews?: number;
+  thumbnail?: string;
+}
+
+export interface SearchQuerySignal {
+  query: string;
+  intent: "commercial" | "brand_alternative" | "category" | "solution_pain" | "pricing";
+  totalOrganicResults?: number;
+  totalAds?: number;
 }
 
 export interface CompetitorIntelligence {
   name: string;
   website: string;
+  domain?: string;
   description: string;
   valueProposition: string;
   products: string[];
@@ -90,6 +163,43 @@ export interface CompetitorIntelligence {
   differentiators: string[];
   pricing?: string;
   rawCrawlData?: CrawlResult;
+  /** Category classification */
+  category?: CompetitorCategory;
+  /** Heuristic score (0 to 100) */
+  score?: number;
+  scoreBreakdown?: CompetitorScoreBreakdown;
+  scoringRationale?: string;
+  /** Search queries that surfaced this competitor */
+  discoveryQueries?: string[];
+  /** Observed organic rankings */
+  organicRankings?: Array<{
+    query: string;
+    position: number;
+    title: string;
+    link: string;
+    snippet?: string;
+  }>;
+  /** Observed sponsored / ad rankings */
+  sponsoredRankings?: Array<{
+    query: string;
+    position: number;
+    title: string;
+    link: string;
+    snippet?: string;
+  }>;
+  /** Google Ads Transparency Center verification status */
+  transparencyStatus?:
+    | "verified_has_ads"
+    | "no_ads_found"
+    | "not_verified"
+    | "api_error"
+    | "insufficient_evidence";
+  /** Transparency Center ad creatives */
+  creatives?: AdvertiserAdCreative[];
+  /** Supporting text evidence quote */
+  evidenceSnippet?: string;
+  /** Verification timestamp */
+  verifiedAt?: string;
 }
 
 export interface MarketIntelligence {
@@ -114,6 +224,7 @@ export interface MarketIntelligence {
     question: string;
     snippet?: string;
     link?: string;
+    title?: string;
   }>;
   organicKeywords?: Array<{
     position: number;
@@ -121,6 +232,14 @@ export interface MarketIntelligence {
     link: string;
     snippet?: string;
   }>;
+  /** Comprehensive Search & Ad Intel additions */
+  keywordAds?: KeywordAdResult[];
+  shoppingResults?: ShoppingProduct[];
+  generatedQueries?: SearchQuerySignal[];
+  messagingPatterns?: Array<{ theme: string; frequency: number; examples: string[] }>;
+  strategicOpportunities?: string[];
+  strategicThreats?: string[];
+  collectedAt?: string;
 }
 
 export interface TavilySearchResult {

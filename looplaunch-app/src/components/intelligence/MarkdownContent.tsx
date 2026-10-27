@@ -18,9 +18,18 @@ function renderInline(text: string): React.ReactNode[] {
 
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
+      const inner = part.slice(2, -2);
+      // Bold reads well on short labels ("Day 1:"), but whole bolded sentences shout.
+      if (inner.length > 48) {
+        return (
+          <span key={i} className="text-[#F4F4F5]">
+            {inner}
+          </span>
+        );
+      }
       return (
         <strong key={i} className="font-semibold text-[#F4F4F5]">
-          {part.slice(2, -2)}
+          {inner}
         </strong>
       );
     }
@@ -94,7 +103,7 @@ export function MarkdownContent({
 
   return (
     <div
-      className={`space-y-3.5 text-[#D4D4D8] text-[14px] leading-[1.65] font-normal ${className}`}
+      className={`space-y-3.5 text-[#D4D4D8] text-[15px] leading-[1.7] font-normal ${className}`}
     >
       {blocks.map((block, idx) => {
         const trimmed = block.trim();
@@ -198,7 +207,7 @@ export function MarkdownContent({
                 const itemText = match ? match[2] : l;
                 return (
                   <li key={li} className="flex items-start gap-2.5">
-                    <span className="font-mono text-xs font-medium text-[#71717A] shrink-0 mt-0.5 w-4 text-right">
+                    <span className="text-[13px] font-medium text-[#71717A] tabular-nums shrink-0 w-4 text-right">
                       {num}.
                     </span>
                     <span className="flex-1">{renderInline(itemText)}</span>

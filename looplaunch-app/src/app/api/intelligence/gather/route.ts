@@ -2,14 +2,15 @@
  * POST /api/intelligence/gather
  *
  * Main intelligence pipeline endpoint.
- * Receives onboarding data (new 9-question format) and orchestrates:
- * 1. Crawl company website
- * 2. Market research (Tavily)
- * 3. Gemini structuring (company, competitors, market)
- * 4. Strategic diagnosis
- * 5. Store everything in the intelligence store
+ * Receives onboarding data (9-question format) and orchestrates:
+ * 1. Crawl company website (Crawl4AI with fetch fallback)
+ * 2. Automatic Business Profiling (Industry, sub-industry, business model, audience, pricing, geography, confidence)
+ * 3. Competitor Discovery Engine (8-12 search queries, SerpApi organic + ads, Tavily, 6-factor heuristic scoring, Transparency Center)
+ * 4. Market Dynamics & Search Landscape (People Also Ask, keyword ads, shopping, messaging patterns)
+ * 5. Strategic SWOT & Positioning Diagnosis
+ * 6. Store everything in Supabase persistent store & in-memory cache
  *
- * Returns immediately with a sessionId.
+ * Returns immediately with a sessionId (202 Accepted).
  * Pipeline runs asynchronously — poll /api/intelligence/status for progress.
  */
 
@@ -24,16 +25,15 @@ import {
   crawlWebsite,
   crawlResultToText,
 } from "@/lib/crawler/website-crawler";
+import { buildBusinessProfile } from "@/lib/ai/business-profiler";
+import { runCompetitorDiscoveryEngine } from "@/lib/research/competitor-engine";
 import {
-  analyzeCompany,
-  analyzeCompetitor,
   analyzeMarket,
   generateDiagnosis,
 } from "@/lib/ai/gemini";
-import { runMarketResearch } from "@/lib/research/tavily";
 
 // ──────────────────────────────────────────────
-// Validation (updated for new 9-question format)
+// Validation (9-question format)
 // ──────────────────────────────────────────────
 
 function validateInput(body: unknown): OnboardingInput | null {
@@ -49,8 +49,8 @@ function validateInput(body: unknown): OnboardingInput | null {
     industry: (data.industry as string) || "",
     stage: (data.stage as string) || "",
     coreOffer: (data.coreOffer as string) || "",
-    audience: Array.isArray(data.audience) ? data.audience as string[] : [],
-    salesChannels: Array.isArray(data.salesChannels) ? data.salesChannels as string[] : [],
+    audience: Array.isArray(data.audience) ? (data.audience as string[]) : [],
+    salesChannels: Array.isArray(data.salesChannels) ? (data.salesChannels as string[]) : [],
     biggestHeadache: (data.biggestHeadache as string) || "",
     thirtyDayGoal: (data.thirtyDayGoal as string) || "",
     companyName: (data.companyName as string) || undefined,
@@ -64,7 +64,7 @@ function validateInput(body: unknown): OnboardingInput | null {
 async function runPipeline(sessionId: string, input: OnboardingInput) {
   try {
     // ─── STAGE 1: Crawl Company Website ───
-    await updateStatus(sessionId, "crawling_company", "Researching your website...");
+    await updateStatus(sessionId, "crawling_company", "Crawling and extracting evidence from your website...");
     let companyCrawl;
     try {
       companyCrawl = await crawlWebsite(input.website);
@@ -74,112 +74,94 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     }
     const companyText = crawlResultToText(companyCrawl);
 
-    // Extract company name from crawl if not provided
-    const derivedCompanyName =
-      input.companyName ||
-      (companyCrawl.pages?.[0]?.title
-        ? companyCrawl.pages[0].title.split(/[|\-–—]/)[0].trim()
-        : new URL(input.website).hostname.replace(/^www\./, "").split(".")[0]);
-    input.companyName = derivedCompanyName;
+    // ─── STAGE 2: Automatic Business Profiling ───
+    await updateStatus(sessionId, "analyzing_company", "Synthesizing evidence-grounded business profile...");
+    const companyIntel = await buildBusinessProfile(input, companyText);
+    companyIntel.rawCrawlData = companyCrawl;
+    input.companyName = companyIntel.name;
 
-    // ─── STAGE 2: Competitor Research (search-based, no user-supplied competitors) ───
-    await updateStatus(sessionId, "crawling_competitors", "Investigating competitive landscape...");
-    // In the new flow we don't ask for competitor URLs directly.
-    // We discover competitors via market research and SerpApi instead.
-    const competitorCrawls: { name: string; text: string }[] = [];
-
-    // ─── STAGE 3: Market Research (Tavily + SerpApi) ───
-    await updateStatus(sessionId, "researching_market", "Analyzing market demand & competitor search footprint...");
-    let marketResearchText = "";
-    let rawTavilyResults: import("@/lib/intelligence/types").TavilySearchResult[] = [];
-    try {
-      const searchContext = `${input.coreOffer} ${input.industry}`;
-      const { allResults, summaryText } = await runMarketResearch(
-        searchContext,
-        input.biggestHeadache,
-        "" // no explicit competitors in new flow
-      );
-      marketResearchText = summaryText;
-      rawTavilyResults = allResults;
-    } catch (e) {
-      console.warn("[Pipeline] Market research failed:", e);
-    }
-
-    // Live SerpApi: Competitor Google Ads & Real search questions (PAA)
-    let serpAds: Array<{ title: string; link: string; snippet?: string; displayedLink?: string }> = [];
-    let serpQuestions: Array<{ question: string; snippet?: string; link?: string }> = [];
-    let serpKeywords: Array<{ position: number; title: string; link: string; snippet?: string }> = [];
-
-    try {
-      const serpQuery = `${input.industry} ${input.coreOffer} alternatives`;
-        
-      const { searchGoogleIntelligence } = await import("@/lib/research/serpapi");
-      const serpData = await searchGoogleIntelligence(serpQuery);
-
-      if (serpData) {
-        serpAds = serpData.ads;
-        serpQuestions = serpData.peopleAlsoAsk;
-        serpKeywords = serpData.organicResults;
-
-        // Enhance Gemini's market research prompt with real Google search intent
-        if (serpQuestions.length > 0) {
-          const questionsSnippet = serpQuestions.map((q) => `• ${q.question}`).join("\n");
-          marketResearchText += `\n\n### Real Google Search Questions from Buyers:\n${questionsSnippet}`;
-        }
-        if (serpAds.length > 0) {
-          const adsSnippet = serpAds.map((ad) => `• [Ad] "${ad.title}" - ${ad.snippet}`).join("\n");
-          marketResearchText += `\n\n### Active Google Ads in Category:\n${adsSnippet}`;
-        }
-      }
-    } catch (e) {
-      console.warn("[Pipeline] SerpApi intelligence gathering non-fatal error:", e);
-    }
-
-    // ─── STAGE 4: Gemini — Analyze Company ───
-    await updateStatus(sessionId, "analyzing_company", "Building company intelligence profile...");
-    const companyIntel = await analyzeCompany(input, companyText);
-    await updateSession(sessionId, { companyIntelligence: companyIntel });
-
-    // ─── STAGE 5: Gemini — Analyze Competitors (from search results) ───
-    await updateStatus(sessionId, "analyzing_competitors", "Analyzing competitive landscape...");
-    const companyContext = `${companyIntel.name}: ${companyIntel.description}. Value prop: ${companyIntel.valueProposition}`;
-    const competitorIntels = [];
-    for (const comp of competitorCrawls) {
-      try {
-        const intel = await analyzeCompetitor(comp.name, comp.text, companyContext);
-        competitorIntels.push(intel);
-      } catch (e) {
-        console.warn(`[Pipeline] Competitor analysis failed for ${comp.name}:`, e);
-      }
-    }
-    await updateSession(sessionId, { competitorIntelligence: competitorIntels });
-
-    // ─── STAGE 6: Gemini — Analyze Market ───
-    await updateStatus(sessionId, "analyzing_market", "Understanding market dynamics & search demand...");
-    const marketIntel = await analyzeMarket(input, marketResearchText);
     await updateSession(sessionId, {
-      marketIntelligence: {
-        ...marketIntel,
-        searchResults: rawTavilyResults,
-        googleAds: serpAds,
-        peopleAlsoAsk: serpQuestions,
-        organicKeywords: serpKeywords,
-      },
+      companyIntelligence: companyIntel,
+      onboardingInput: input,
     });
 
-    // ─── STAGE 7: Gemini — Strategic Diagnosis ───
-    await updateStatus(sessionId, "diagnosing", "Generating strategic diagnosis...");
+    // ─── STAGE 3: Competitor Discovery & Search Intelligence Engine ───
+    await updateStatus(
+      sessionId,
+      "crawling_competitors",
+      "Running 8-12 search query discovery pipeline across Google Search & Ads..."
+    );
+
+    const compEngineResult = await runCompetitorDiscoveryEngine(companyIntel);
+
+    // Save verified competitors
+    await updateSession(sessionId, {
+      competitorIntelligence: compEngineResult.verifiedCompetitors,
+    });
+
+    // ─── STAGE 4: Gemini & Market Dynamics Synthesis ───
+    await updateStatus(
+      sessionId,
+      "analyzing_market",
+      "Analyzing competitive messaging patterns & buyer search intent..."
+    );
+
+    let marketResearchContext = `Company: ${companyIntel.name} in ${companyIntel.industry} (${companyIntel.subIndustry || ""})\n`;
+    marketResearchContext += `Value Proposition: ${companyIntel.valueProposition}\n`;
+    marketResearchContext += `Verified Competitors:\n${compEngineResult.verifiedCompetitors.slice(0, 5).map((c) => `• ${c.name} (${c.website}) [${c.category}]: ${c.description} - Pricing: ${c.pricing || "N/A"}`).join("\n")}\n\n`;
+
+    if (compEngineResult.peopleAlsoAsk.length > 0) {
+      marketResearchContext += `Google People Also Ask Questions:\n${compEngineResult.peopleAlsoAsk.map((p) => `• ${p.question}`).join("\n")}\n\n`;
+    }
+
+    if (compEngineResult.keywordAds.length > 0) {
+      marketResearchContext += `Active Google Ads in Space:\n${compEngineResult.keywordAds.slice(0, 6).map((a) => `• [${a.advertiserName || a.displayedLink}] "${a.title}" - ${a.snippet}`).join("\n")}\n\n`;
+    }
+
+    const marketIntel = await analyzeMarket(input, marketResearchContext);
+
+    // Merge comprehensive search signals into MarketIntelligence
+    const enrichedMarketIntel = {
+      ...marketIntel,
+      googleAds: compEngineResult.keywordAds.slice(0, 8).map((a) => ({
+        title: a.title,
+        link: a.link,
+        snippet: a.snippet,
+        displayedLink: a.displayedLink,
+      })),
+      keywordAds: compEngineResult.keywordAds,
+      shoppingResults: compEngineResult.shoppingResults,
+      peopleAlsoAsk: compEngineResult.peopleAlsoAsk,
+      organicKeywords: compEngineResult.organicKeywords.slice(0, 10).map((o) => ({
+        position: o.position,
+        title: o.title,
+        link: o.link,
+        snippet: o.snippet,
+      })),
+      generatedQueries: compEngineResult.generatedQueries,
+      messagingPatterns: compEngineResult.messagingPatterns,
+      strategicOpportunities: compEngineResult.strategicOpportunities,
+      strategicThreats: compEngineResult.strategicThreats,
+      collectedAt: new Date().toISOString(),
+    };
+
+    await updateSession(sessionId, {
+      marketIntelligence: enrichedMarketIntel,
+    });
+
+    // ─── STAGE 5: Strategic Diagnosis ───
+    await updateStatus(sessionId, "diagnosing", "Formulating competitive SWOT & positioning diagnosis...");
     const diagnosis = await generateDiagnosis(
       companyIntel,
-      competitorIntels,
-      marketIntel,
+      compEngineResult.verifiedCompetitors,
+      enrichedMarketIntel,
       input
     );
     await updateSession(sessionId, { diagnosis });
 
     // ─── DONE ───
     await updateStatus(sessionId, "ready", "Intelligence gathering complete. Ready for questions.");
-    console.log(`[Pipeline] Session ${sessionId} complete.`);
+    console.log(`[Pipeline] Session ${sessionId} complete with ${compEngineResult.verifiedCompetitors.length} verified competitors.`);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error(`[Pipeline] Fatal error for session ${sessionId}:`, msg);
@@ -207,7 +189,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log warning if Gemini is using fallback mode
     if (!process.env.GEMINI_API_KEY) {
       console.warn("[Pipeline] GEMINI_API_KEY is not set — pipeline will operate using contextual demo mode.");
     }

@@ -336,31 +336,74 @@ Biggest Headache: ${onboardingInput.biggestHeadache || "Not specified"} — this
 `
     : "";
 
+  // Format competitor landscape
+  const directComps = (competitorIntel || []).filter((c: any) => c.category === "direct").slice(0, 5);
+  const indirectComps = (competitorIntel || []).filter((c: any) => c.category === "indirect").slice(0, 4);
+  const aggComps = (competitorIntel || []).filter((c: any) => c.category === "marketplace" || c.category === "publisher").slice(0, 3);
+
+  const directCompsText = directComps.length > 0
+    ? directComps
+        .map((c: any) => `• ${c.name} (${c.domain || c.website}): Fit Score ${c.score || 70}/100 | Value: "${c.valueProposition || c.description}" | Pricing: ${c.pricing || "Not disclosed"} | Ad Status: ${c.transparencyStatus || "unknown"}`)
+        .join("\n")
+    : (competitorIntel || []).slice(0, 3).map((c: any) => `• ${c.name}: ${c.description}`).join("\n") || "Industry incumbents";
+
+  const indirectCompsText = indirectComps.length > 0
+    ? indirectComps.map((c: any) => `• ${c.name} (${c.domain || c.website}): Fit Score ${c.score || 50}/100 | ${c.description}`).join("\n")
+    : "None observed";
+
+  const messagingPatternsText = marketIntel?.messagingPatterns && marketIntel.messagingPatterns.length > 0
+    ? marketIntel.messagingPatterns.map((m: any) => `• "${m.theme}" (Observed across ${m.frequency} competitor ad headlines)`).join("\n")
+    : "Standard category value messaging";
+
+  const realSearchQuestionsText = marketIntel?.peopleAlsoAsk && marketIntel.peopleAlsoAsk.length > 0
+    ? marketIntel.peopleAlsoAsk.slice(0, 5).map((p: any) => `• "${p.question}"`).join("\n")
+    : "Standard buyer comparison queries";
+
   return `You are the Chief Strategy Officer and Lead Marketing Advisor at Loop Launch. You are in an ONGOING, collaborative strategic advisory conversation with the company founder/executive.
 
 ${summaryBlock}═══ CONVERSATION HISTORY (Previous turns in this session) ═══
 ${historyText}
 
 ${onboardingBlock}${frameworkSection}${webResearchSection}
-═══ AUTHORITATIVE COMPANY INTELLIGENCE BASE ═══
+═══ AUTHORITATIVE BUSINESS PROFILE (EVIDENCE-GROUNDED) ═══
 Company: ${companyIntel.name} (${companyIntel.website || "N/A"})
-Core Focus: ${companyIntel.description}
+Industry: ${companyIntel.industry} (${companyIntel.subIndustry || "General"})
+Business Model: ${companyIntel.businessModel || "Not specified"}
+Geography: ${companyIntel.geography || "unspecified"}
+Pricing & Positioning: ${companyIntel.pricingAndPositioning || "not_disclosed"}
+Core Offer: ${companyIntel.description}
 Value Proposition: ${companyIntel.valueProposition}
-Target Segments: ${companyIntel.targetSegments?.join("; ") || "B2B Operators"}
+Target Segments: ${companyIntel.targetSegments?.join("; ") || "Target Operators"}
 Strengths: ${companyIntel.strengths?.join("; ") || "Speed and agility"}
 Weaknesses: ${companyIntel.weaknesses?.join("; ") || "Emerging brand awareness"}
 Current Channels: ${companyIntel.currentChannels?.join(", ") || "Direct, organic"}
-Known Competitors: ${competitorIntel?.map((c: any) => c.name).join(", ") || "Industry incumbents"}
 Core Positioning Gap: ${diagnosis?.positioning?.gap || "Focusing on features over business outcomes"}
 Key Strategic Bottleneck: ${diagnosis?.keyInsights?.[0] || "Acquisition velocity and competitive differentiation"}
+
+═══ VERIFIED COMPETITIVE SEARCH & AD LANDSCAPE ═══
+Verified Direct Competitors:
+${directCompsText}
+
+Indirect Competitors & Alternatives:
+${indirectCompsText}
+
+Marketplace & Publisher Dominance:
+${aggComps.map((c: any) => `• ${c.name} (${c.domain}) [${c.category}]`).join("\n") || "No major aggregators observed"}
+
+Common Market Messaging Patterns in Paid Ads:
+${messagingPatternsText}
+
+Real Buyer Search Questions (Google People Also Ask):
+${realSearchQuestionsText}
 
 ═══ CURRENT CLIENT QUESTION ═══
 "${question}"
 ${referenceNote}${intentNote}
 ═══ CONVERSATIONAL RULES ═══
-1. **GROUND IN LOOP LAUNCH FRAMEWORK**:
-   - If the "LOOP LAUNCH PROPRIETARY FRAMEWORK" section above contains relevant principles, frameworks, loops, or heuristics, prioritize applying them directly to the client's problem.
-   - Mention the framework terminology and principles naturally without reading like a textbook.
+1. **GROUND IN LOOP LAUNCH FRAMEWORK & OBSERVED SEARCH SIGNALS**:
+   - If the "LOOP LAUNCH PROPRIETARY FRAMEWORK" section above contains relevant principles, loops, or heuristics, prioritize applying them directly.
+   - Ground answers in observed competitive search evidence (e.g. cite verified competitors by name, reference common competitor ad hooks).
+   - If research evidence on an attribute or competitor is missing or not disclosed, explicitly state the limitation or uncertainty instead of inventing facts. Never fabricate competitor revenue, conversion rates, or spend.
 
 2. **USE THE ONBOARDING ANSWERS DEEPLY**:
    - The client's biggest headache ("${onboardingInput?.biggestHeadache || "not specified"}") should be the #1 problem your strategy addresses.

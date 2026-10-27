@@ -733,3 +733,52 @@ export async function healthCheck(): Promise<boolean> {
     return false;
   }
 }
+
+// ──────────────────────────────────────────────
+// Quick answers for "People Also Ask" questions
+// ──────────────────────────────────────────────
+
+export interface BuyerQuestionAnswer {
+  /** A plain 2–3 sentence answer to the buyer's question. */
+  answer: string;
+  /** One concrete way the brand can use this question in its marketing. */
+  tip: string;
+}
+
+/**
+ * Answers a question real buyers ask Google, in plain language, plus one
+ * practical way the company can use it. Throws if the model is unavailable.
+ */
+export async function answerBuyerQuestion(
+  question: string,
+  company: Pick<CompanyIntelligence, "name" | "industry" | "description"> | null
+): Promise<BuyerQuestionAnswer> {
+  const model = getModel();
+  if (!model) throw new Error("GEMINI_API_KEY not configured");
+
+  const about = company
+    ? `The brand is ${company.name} (${company.industry}). ${company.description}`.slice(0, 600)
+    : "The brand is a small business.";
+
+  const prompt = `People search Google for: "${question}"
+${about}
+
+Reply with JSON only, no markdown:
+{"answer": "A clear, neutral answer to the question in 2-3 short sentences, written for a normal person. No hype.",
+ "tip": "One sentence on exactly how this brand can use this question in its marketing (a post, a page, an FAQ, a video). Start with a verb."}`;
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await model.generateContent(prompt);
+      const parsed = parseJsonResponse<Partial<BuyerQuestionAnswer>>(result.response.text());
+      if (!parsed.answer) throw new Error("Empty answer");
+      return { answer: parsed.answer.trim(), tip: (parsed.tip || "").trim() };
+    } catch (e) {
+      lastError = e;
+      // The model sometimes returns 503 under load; one short retry usually works.
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+  throw lastError;
+}
