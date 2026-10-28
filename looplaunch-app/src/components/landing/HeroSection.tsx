@@ -33,7 +33,12 @@ const MULTI_SELECT_OPTIONS: Record<string, string[]> = {
   salesChannels: SALES_CHANNEL_OPTIONS,
 };
 
-export function HeroSection() {
+interface HeroSectionProps {
+  /** "app" is the signed-in New analysis page: no marketing scroll hint below the questions. */
+  variant?: "landing" | "app";
+}
+
+export function HeroSection({ variant = "landing" }: HeroSectionProps) {
   const router = useRouter();
   const {
     data,
@@ -44,6 +49,7 @@ export function HeroSection() {
     goPrev,
     goToStep,
     canGoPrev,
+    clearSaved,
   } = useOnboarding();
 
   // Intelligence pipeline submission state
@@ -219,6 +225,8 @@ export function HeroSection() {
       }
 
       const result = await res.json();
+      // The answers now live in the analysis; coming back to the home page starts fresh.
+      clearSaved();
       router.push(`/intelligence?session=${result.sessionId}`);
     } catch {
       setSubmitError("Network error. Please check your connection.");
@@ -251,7 +259,9 @@ export function HeroSection() {
   return (
     <section
       id="hero-section"
-      className="relative min-h-[92vh] flex flex-col justify-between items-center px-6 pt-16 pb-12 overflow-hidden bg-black text-text-primary"
+      className={`relative flex flex-col justify-between items-center px-6 overflow-hidden bg-black text-text-primary ${
+        variant === "app" ? "min-h-[calc(100vh-3.5rem)] pt-10 pb-10" : "min-h-[92vh] pt-16 pb-12"
+      }`}
     >
       {/* Layer 0: SideRays */}
       <div
@@ -297,7 +307,7 @@ export function HeroSection() {
               <span>Back</span>
             </button>
             <div className="text-xs font-mono text-[#8B5CF6] tracking-wider uppercase font-semibold">
-              Step {currentStepIndex + 1} of {STEPS.length - 1}
+              {currentStep.key === "review" ? "Review" : `Step ${currentStepIndex + 1} of ${STEPS.length - 1}`}
             </div>
           </div>
         )}
@@ -740,6 +750,7 @@ export function HeroSection() {
       </div>
 
       {/* Subtle scroll indicator */}
+      {variant === "landing" && (
       <div className="relative z-[2] w-full flex justify-center mt-auto pt-4">
         <button
           onClick={scrollToExplore}
@@ -749,6 +760,7 @@ export function HeroSection() {
           <span>&darr;</span>
         </button>
       </div>
+      )}
     </section>
   );
 }

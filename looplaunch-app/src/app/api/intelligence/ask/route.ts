@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { getSession, addMessageToSession } from "@/lib/intelligence/store";
+import { canUseSession } from "@/lib/auth/session-access";
 import { answerQuestion } from "@/lib/ai/gemini";
 import { retrieveFrameworkContext } from "@/lib/ai/framework-retriever";
 import { researchQuestion } from "@/lib/research/tavily";
@@ -48,6 +49,13 @@ export async function POST(request: Request) {
     }
 
     if (!session) {
+      return NextResponse.json(
+        { error: "Session not found or expired" },
+        { status: 404 }
+      );
+    }
+
+    if (!(await canUseSession(session))) {
       return NextResponse.json(
         { error: "Session not found or expired" },
         { status: 404 }

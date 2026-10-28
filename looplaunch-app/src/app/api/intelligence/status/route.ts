@@ -7,6 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/intelligence/store";
+import { canUseSession } from "@/lib/auth/session-access";
 import type { StatusResponse } from "@/lib/intelligence/types";
 
 export async function GET(request: Request) {
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
 
   const session = await getSession(sessionId);
 
-  if (!session) {
+  if (!session || !(await canUseSession(session))) {
     return NextResponse.json(
       { error: "Session not found or expired" },
       { status: 404 }

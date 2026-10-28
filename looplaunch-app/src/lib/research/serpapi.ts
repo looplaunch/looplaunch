@@ -33,6 +33,9 @@ export interface PeopleAlsoAskQuestion {
   snippet?: string;
   title?: string;
   link?: string;
+  /** Loopy's answer and marketing tip, added after the search */
+  answer?: string;
+  tip?: string;
 }
 
 export interface OrganicSearchResult {

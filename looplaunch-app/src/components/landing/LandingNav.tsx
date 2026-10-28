@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { GooeyNav, type GooeyNavItem } from "@/components/ui/GooeyNav";
+import Link from "next/link";
+import { LogoMenu } from "@/components/brand/LogoMenu";
 
 interface LandingNavProps {
   onGetStarted?: () => void;
@@ -40,21 +42,19 @@ export function LandingNav({ onGetStarted }: LandingNavProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border-subtle bg-black/85 backdrop-blur-md transition-all">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6 sm:px-8">
-        {/* Brand: Official Loop Launch Logo */}
-        <a
-          href="#"
-          className="flex items-center select-none z-[52] hover:opacity-90 transition-opacity"
-          aria-label="Loop Launch Home"
-        >
-          <Image
-            src="/logo.png"
-            alt="Loop Launch"
-            width={145}
-            height={48}
-            className="h-8 sm:h-9 w-auto object-contain"
-            priority
-          />
-        </a>
+        {/* Brand: Official Loop Launch Logo (opens the "where to next?" menu) */}
+        <div className="z-[52]">
+          <LogoMenu>
+            <Image
+              src="/logo.png"
+              alt="Loop Launch"
+              width={145}
+              height={48}
+              className="h-8 sm:h-9 w-auto object-contain"
+              priority
+            />
+          </LogoMenu>
+        </div>
 
         {/* Center / Right navigation: GooeyNav integration */}
         <div className="hidden sm:flex items-center z-[51]">
@@ -72,7 +72,13 @@ export function LandingNav({ onGetStarted }: LandingNavProps) {
         </div>
 
         {/* Right CTA Button */}
-        <div className="flex items-center z-[52]">
+        <div className="flex items-center gap-3 z-[52]">
+          <Link
+            href="/login"
+            className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-[#D4D4D8] hover:text-white hover:bg-white/5 transition-colors"
+          >
+            Log in
+          </Link>
           <button
             onClick={scrollToHero}
             className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-[#8B5CF6] text-white hover:bg-[#7C3AED] border border-[#8B5CF6]/50 active:scale-95 transition-all cursor-pointer"

@@ -19,6 +19,7 @@ import type {
   StrategicDiagnosis,
 } from "./types";
 import { getSupabase } from "@/lib/db/supabase";
+import { displayDomain, userQuestions, type SessionSummary } from "./summary";
 
 // ──────────────────────────────────────────────
 // Constants
@@ -67,6 +68,7 @@ interface SessionRow {
   messages: ChatMessage[] | null;
   conversation_summary: string | null;
   error: string | null;
+  user_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +87,8 @@ function sessionToRow(session: IntelligenceSession): SessionRow {
     messages: session.messages || [],
     conversation_summary: session.conversationSummary || null,
     error: session.error || null,
+    // Only sent when set, so anonymous saves still work before migration 005 is run.
+    ...(session.userId ? { user_id: session.userId } : {}),
     created_at: session.createdAt,
     updated_at: session.updatedAt,
   };
@@ -108,6 +112,7 @@ function rowToSession(row: SessionRow): IntelligenceSession {
   if (row.diagnosis) session.diagnosis = row.diagnosis;
   if (row.conversation_summary) session.conversationSummary = row.conversation_summary;
   if (row.error) session.error = row.error;
+  if (row.user_id) session.userId = row.user_id;
 
   return session;
 }
@@ -127,6 +132,7 @@ function partialUpdatesToRow(
   if (updates.messages !== undefined) row.messages = updates.messages;
   if (updates.conversationSummary !== undefined) row.conversation_summary = updates.conversationSummary;
   if (updates.error !== undefined) row.error = updates.error;
+  if (updates.userId !== undefined) row.user_id = updates.userId;
   // updated_at is handled by the DB trigger, but we set it here too for consistency
   if (updates.updatedAt !== undefined) row.updated_at = updates.updatedAt;
   return row;
@@ -141,7 +147,8 @@ function partialUpdatesToRow(
  */
 export function generateSessionId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 10);
+  // Random UUID bits, not Math.random: the ID is the only thing guarding an unowned analysis.
+  const random = globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 16);
   return `ll_${timestamp}_${random}`;
 }
 
@@ -149,7 +156,8 @@ export function generateSessionId(): string {
  * Create a new intelligence session.
  */
 export async function createSession(
-  input: IntelligenceSession["onboardingInput"]
+  input: IntelligenceSession["onboardingInput"],
+  userId?: string
 ): Promise<IntelligenceSession> {
   const memory = getMemoryStore();
   const session: IntelligenceSession = {
@@ -157,6 +165,7 @@ export async function createSession(
     status: "idle",
     statusMessage: "Session created",
     onboardingInput: input,
+    userId,
     messages: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -531,6 +540,61 @@ export async function listSessions(): Promise<IntelligenceSession[]> {
   }
 
   return Array.from(getMemoryStore().values());
+}
+
+/**
+ * One user's analyses, newest first, trimmed to what the dashboard and History show.
+ * Only the database knows owners, so this is Supabase-only.
+ */
+export async function listSessionSummaries(userId: string, limit = 50): Promise<SessionSummary[]> {
+  try {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from(SESSIONS_TABLE)
+      .select("id, status, onboarding_input, company_name:company_intelligence->>name, messages, created_at, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn("[Supabase Store] Error listing sessions for user:", error.message);
+      return [];
+    }
+
+    return (data || []).map((row) => {
+      const input = (row.onboarding_input || {}) as Partial<OnboardingInput>;
+      const questions = userQuestions((row.messages || []) as ChatMessage[]);
+      return {
+        id: row.id as string,
+        companyName: input.companyName || (row.company_name as string | null) || displayDomain(input.website) || "Untitled analysis",
+        website: input.website || "",
+        status: row.status as PipelineStatus,
+        createdAt: row.created_at as string,
+        updatedAt: row.updated_at as string,
+        questionCount: questions.length,
+        lastQuestion: questions[questions.length - 1],
+      };
+    });
+  } catch (error) {
+    console.warn("[Supabase Store] Error listing sessions for user:", error);
+    return [];
+  }
+}
+
+/**
+ * Give an unowned analysis to a user (used right after login).
+ * Returns false if it doesn't exist or already belongs to someone else.
+ */
+export async function claimSession(sessionId: string, userId: string): Promise<boolean> {
+  const session = await getSession(sessionId);
+  if (!session) return false;
+  if (session.userId === userId) return true;
+  if (session.userId) return false;
+
+  const updated = await updateSession(sessionId, { userId });
+  return !!updated;
 }
 
 // ──────────────────────────────────────────────

@@ -1,27 +1,37 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 
 /**
- * Turns a markdown answer into a visual mind map for people who'd rather not read.
- * Headings (or bold lead-ins) become branches; list items become the leaves.
+ * A simple mind map of one answer, for people who'd rather not read the whole thing.
+ * Sections become branches and each step becomes a short point. Tapping a branch
+ * opens it; tapping a point shows the full step right inside the map.
  */
+
+export interface MindMapLeaf {
+  /** Short, scannable label */
+  label: string;
+  /** Full text, shown when the point is opened */
+  detail?: string;
+}
 
 export interface MindMapBranch {
   label: string;
-  leaves: string[];
+  leaves: MindMapLeaf[];
 }
 
 export interface MindMapData {
   root: string;
+  /** Opening paragraph of the answer, shown when the centre is tapped */
+  summary?: string;
   branches: MindMapBranch[];
 }
 
 const MAX_BRANCHES = 8;
-const MAX_LEAVES = 6;
+const MAX_LEAVES = 8;
 
 function clean(text: string): string {
   return text
@@ -30,34 +40,69 @@ function clean(text: string): string {
     .replace(/^#+\s*/, "")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/[:：]$/, "");
+    .replace(/[:：]$/, "")
+    .trim();
+}
+
+/** "MON" → "Mon", "STOP" → "Stop"; mixed-case text is left alone. */
+function tidyCase(text: string): string {
+  return text === text.toUpperCase() && /[A-Z]/.test(text) ? text.charAt(0) + text.slice(1).toLowerCase() : text;
+}
+
+function firstWords(text: string, n: number): string {
+  const words = text.split(" ");
+  if (words.length <= n) return text;
+  return `${words.slice(0, n).join(" ").replace(/[,.;:!?-]+$/, "")}…`;
 }
 
 function shorten(text: string, max: number): string {
-  if (text.length <= max) return text;
-  // Prefer cutting at the end of a lead-in label like "Day 1: ..."
-  const colon = text.indexOf(":");
-  if (colon > 8 && colon < max) return text.slice(0, colon);
-  const cut = text.slice(0, max);
-  return cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 12)).trimEnd() + "…";
+  return text.length <= max ? text : `${text.slice(0, max - 1).replace(/\s+\S*$/, "")}…`;
 }
+
+function toLeaf(text: string, group?: string): MindMapLeaf {
+  let label: string;
+  let detail: string;
+
+  const bold = text.match(/^\*\*([^*]{1,60})\*\*\s*[:\-–—]?\s*(.*)$/);
+  if (bold) {
+    // "**MON** — Audit your site…" or "**Primary KPI:** Cost per sale…"
+    const head = clean(bold[1]);
+    detail = clean(bold[2]);
+    label = detail && head.length <= 5 ? `${tidyCase(head)}: ${firstWords(detail, 5)}` : tidyCase(head) || firstWords(detail, 7);
+  } else {
+    detail = clean(text);
+    const lead = detail.match(/^([A-Za-z0-9 ]{1,14}?)\s*[:—–]\s+(.+)$/);
+    label = lead ? `${tidyCase(lead[1])}: ${firstWords(lead[2], 5)}` : firstWords(detail, 7);
+  }
+
+  if (group) label = `${group}: ${label}`;
+  const plainLabel = label.replace(/…$/, "");
+  const hasMore = detail && detail.length > plainLabel.replace(/^[^:]+:\s*/, "").length + 3;
+  return { label: shorten(label, 64), detail: hasMore ? detail : undefined };
+}
+
+/** Lines that talk to the reader ("Would you like me to…") aren't part of the plan. */
+const isFollowUp = (line: string) => /\*\*next step|would you like me to/i.test(line);
 
 export function parseMindMap(markdown: string, fallbackRoot: string): MindMapData {
   const lines = markdown.split("\n");
   const hasHeadings = lines.some((l) => /^#{1,4}\s+\S/.test(l.trim()));
   let root = fallbackRoot;
+  let summary: string | undefined;
   const branches: MindMapBranch[] = [];
   let current: MindMapBranch | null = null;
+  let group: string | undefined;
 
   const startBranch = (label: string): MindMapBranch => {
-    const b: MindMapBranch = { label: shorten(clean(label), 48), leaves: [] };
+    const b: MindMapBranch = { label: shorten(tidyCase(clean(label)), 64), leaves: [] };
     branches.push(b);
+    group = undefined;
     return b;
   };
 
   for (const raw of lines) {
     const line = raw.trim();
-    if (!line || /^(-{3,}|\*{3,}|_{3,})$/.test(line)) continue;
+    if (!line || /^(-{3,}|\*{3,}|_{3,})$/.test(line) || isFollowUp(line)) continue;
 
     const heading = line.match(/^(#{1,4})\s+(.*)/);
     if (heading) {
@@ -71,63 +116,88 @@ export function parseMindMap(markdown: string, fallbackRoot: string): MindMapDat
     }
 
     const isListItem = /^(?:[-*•]|\d+[.)])\s+/.test(line);
-    const boldLead = line.match(/^(?:[-*•]\s+|\d+[.)]\s+)?\*\*([^*]{2,60})\*\*[:\s]*(.*)$/);
+    const body = line.replace(/^(?:[-*•]|\d+[.)])\s+/, "");
 
-    if (!hasHeadings && boldLead && !isListItem) {
-      // Paragraphs that start with a bold label act as sections when there are no headings.
-      current = startBranch(boldLead[1]);
-      if (boldLead[2]) current.leaves.push(shorten(clean(boldLead[2]), 90));
+    // "**STOP:**" on its own line labels the points below it.
+    const boldOnly = body.match(/^\*\*([^*]{2,40})\*\*:?$/);
+    if (boldOnly) {
+      if (current) group = tidyCase(clean(boldOnly[1]));
+      else if (!hasHeadings) current = startBranch(boldOnly[1]);
       continue;
     }
 
-    if (isListItem) {
-      if (!current) current = startBranch("Key points");
-      current.leaves.push(shorten(clean(line), 90));
+    const boldLead = /^\*\*[^*]{1,60}\*\*/.test(body);
+
+    // Without headings, paragraphs that start with a bold label act as sections.
+    if (!hasHeadings && boldLead && !isListItem && !/^\*\*[^*]{1,5}\*\*\s*[—–-]/.test(body)) {
+      const m = body.match(/^\*\*([^*]{1,60})\*\*\s*[:\-–—]?\s*(.*)$/);
+      current = startBranch(m ? m[1] : body);
+      if (m && m[2]) current.leaves.push(toLeaf(m[2]));
       continue;
     }
 
-    // Plain paragraph: only use it if the branch has nothing yet.
-    if (current && current.leaves.length === 0) {
-      const firstSentence = clean(line).split(/(?<=[.!?])\s/)[0];
-      if (firstSentence) current.leaves.push(shorten(firstSentence, 90));
+    if (!current) {
+      // Text before the first section: the opening paragraph explains the whole map.
+      if (!isListItem && !boldLead) {
+        if (!summary) summary = clean(body);
+        continue;
+      }
+      current = startBranch("Key points");
+    }
+
+    if (isListItem || boldLead || current.leaves.length === 0) {
+      current.leaves.push(toLeaf(body, group));
     }
   }
 
   return {
     root,
+    summary: summary ? shorten(summary, 600) : undefined,
     branches: branches
-      .filter((b) => b.label)
+      .filter((b) => b.label && b.leaves.length > 0)
       .slice(0, MAX_BRANCHES)
-      .map((b) => ({ ...b, leaves: b.leaves.filter(Boolean).slice(0, MAX_LEAVES) })),
+      .map((b) => ({ ...b, leaves: b.leaves.slice(0, MAX_LEAVES) })),
   };
 }
 
-// Muted, distinct hues so each branch is easy to follow by colour alone.
+// ──────────────────────────────────────────────
+// Dialog
+// ──────────────────────────────────────────────
+
 const HUES = ["#F472B6", "#60A5FA", "#34D399", "#FBBF24", "#A78BFA", "#F87171", "#22D3EE", "#FB923C"];
+const LINE = "#3F3F46";
+const ROW_PAD = 8; // vertical padding around every node row
+const NODE_H = 40; // one-line node height; longer labels wrap and grow downwards
+const ROOT_H = 56;
+const ARM = 32; // length of each connector arm
+// Connectors meet each node at the middle of its first line (10px padding + half a 20px line).
+const CENTER_Y = ROW_PAD + NODE_H / 2;
 
-const ROW = 58;
-const PAD = 24;
-const ROOT_W = 180;
-const BRANCH_X = PAD + ROOT_W + 64;
-const BRANCH_W = 210;
-const LEAF_X = BRANCH_X + BRANCH_W + 56;
-const LEAF_W = 290;
-const NODE_H = 46;
-
-function curve(x1: number, y1: number, x2: number, y2: number) {
-  const mx = (x1 + x2) / 2;
-  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+/** The elbow lines that join a row to its parent's spine. */
+function Connector({ first, last }: { first: boolean; last: boolean }) {
+  return (
+    <>
+      {!first && <span aria-hidden="true" className="absolute left-0 top-0 w-px" style={{ height: CENTER_Y, background: LINE }} />}
+      {!last && <span aria-hidden="true" className="absolute left-0 bottom-0 w-px" style={{ top: CENTER_Y, background: LINE }} />}
+      <span aria-hidden="true" className="absolute left-0 h-px" style={{ top: CENTER_Y, width: ARM, background: LINE }} />
+    </>
+  );
 }
+
+const Stub = () => (
+  <span aria-hidden="true" className="block h-px shrink-0" style={{ width: ARM, marginTop: NODE_H / 2, background: LINE }} />
+);
 
 interface MindMapDialogProps {
   open: boolean;
   onClose: () => void;
-  data: MindMapData;
-  onAsk?: (question: string) => void;
+  data: MindMapData | null;
 }
 
-export function MindMapDialog({ open, onClose, data, onAsk }: MindMapDialogProps) {
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+export function MindMapDialog({ open, onClose, data }: MindMapDialogProps) {
+  const [openBranches, setOpenBranches] = useState<Set<number>>(() => new Set([0]));
+  const [openLeaf, setOpenLeaf] = useState<string | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -141,30 +211,11 @@ export function MindMapDialog({ open, onClose, data, onAsk }: MindMapDialogProps
     };
   }, [open, onClose]);
 
-  const layout = useMemo(() => {
-    const branches = [];
-    let row = 0;
-    for (let i = 0; i < data.branches.length; i++) {
-      const b = data.branches[i];
-      const leaves = collapsed.has(i) ? [] : b.leaves;
-      const rows = Math.max(1, leaves.length);
-      branches.push({
-        ...b,
-        i,
-        hue: HUES[i % HUES.length],
-        y: PAD + (row + rows / 2) * ROW,
-        leafYs: leaves.map((_, li) => PAD + (row + li + 0.5) * ROW),
-        shown: leaves,
-      });
-      row += rows;
-    }
-    const height = PAD * 2 + Math.max(row, 1) * ROW;
-    const width = data.branches.some((b) => b.leaves.length) ? LEAF_X + LEAF_W + PAD : BRANCH_X + BRANCH_W + PAD;
-    return { branches, height, width, rootY: height / 2 };
-  }, [data, collapsed]);
+  const branchCount = data?.branches.length ?? 0;
+  const allOpen = branchCount > 0 && openBranches.size === branchCount;
 
-  const toggle = (i: number) =>
-    setCollapsed((prev) => {
+  const toggleBranch = (i: number) =>
+    setOpenBranches((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
@@ -173,7 +224,7 @@ export function MindMapDialog({ open, onClose, data, onAsk }: MindMapDialogProps
 
   return (
     <AnimatePresence>
-      {open && (
+      {open && data && (
         <motion.div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm"
           initial={{ opacity: 0 }}
@@ -185,7 +236,7 @@ export function MindMapDialog({ open, onClose, data, onAsk }: MindMapDialogProps
             role="dialog"
             aria-modal="true"
             aria-label="Mind map of this answer"
-            className="relative w-full max-w-6xl max-h-full flex flex-col rounded-2xl bg-[#0D0D10] border border-[#27272A] overflow-hidden"
+            className="relative w-full max-w-5xl max-h-full flex flex-col rounded-2xl bg-[#0D0D10] border border-[#27272A] overflow-hidden"
             initial={{ y: 16, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 10, scale: 0.98 }}
@@ -197,107 +248,145 @@ export function MindMapDialog({ open, onClose, data, onAsk }: MindMapDialogProps
                 <LoopyMascot size={30} />
                 <div className="min-w-0">
                   <h2 className="text-[15px] font-semibold text-[#F4F4F5] truncate">Mind map</h2>
-                  <p className="text-xs text-[#A1A1AA] truncate">
-                    The whole plan at a glance. Tap a branch to fold it{onAsk ? ", or a point to ask about it" : ""}.
-                  </p>
+                  <p className="text-xs text-[#A1A1AA] truncate">Tap a branch to open it. Tap a point to read the full step.</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[#A1A1AA] hover:text-[#F4F4F5] hover:bg-[#17171B] transition-colors cursor-pointer"
-                aria-label="Close mind map"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                {branchCount > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenBranches(allOpen ? new Set() : new Set(data.branches.map((_, i) => i)));
+                      setOpenLeaf(null);
+                    }}
+                    className="px-2.5 h-8 rounded-lg text-xs font-medium text-[#A1A1AA] hover:text-[#F4F4F5] hover:bg-[#17171B] transition-colors cursor-pointer"
+                  >
+                    {allOpen ? "Close all" : "Open all"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-[#A1A1AA] hover:text-[#F4F4F5] hover:bg-[#17171B] transition-colors cursor-pointer"
+                  aria-label="Close mind map"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-auto">
-              <div className="relative mx-auto" style={{ width: layout.width, height: layout.height }}>
-                <svg className="absolute inset-0 pointer-events-none" width={layout.width} height={layout.height} aria-hidden="true">
-                  {layout.branches.map((b) => (
-                    <g key={b.i}>
-                      <path
-                        d={curve(PAD + ROOT_W, layout.rootY, BRANCH_X, b.y)}
-                        fill="none"
-                        stroke={b.hue}
-                        strokeOpacity={0.55}
-                        strokeWidth={2}
-                      />
-                      {b.leafYs.map((ly, li) => (
-                        <path
-                          key={li}
-                          d={curve(BRANCH_X + BRANCH_W, b.y, LEAF_X, ly)}
-                          fill="none"
-                          stroke={b.hue}
-                          strokeOpacity={0.35}
-                          strokeWidth={1.5}
-                        />
-                      ))}
-                    </g>
-                  ))}
-                </svg>
-
-                {/* Root */}
-                <div
-                  className="absolute flex items-center justify-center text-center rounded-2xl bg-[#F4F4F5] text-[#09090B] px-3 font-semibold text-sm leading-snug"
-                  style={{ left: PAD, top: layout.rootY - 30, width: ROOT_W, height: 60 }}
-                >
-                  <span className="line-clamp-2">{data.root}</span>
-                </div>
-
-                {layout.branches.map((b) => (
-                  <div key={b.i}>
-                    <motion.button
+            <div className="overflow-auto px-4 sm:px-8 py-6">
+              {branchCount === 0 ? (
+                <p className="text-sm text-[#A1A1AA] text-center py-10">This answer is too short for a mind map.</p>
+              ) : (
+                <div className="flex items-start w-max mx-auto">
+                  {/* Centre */}
+                  <div className="w-48 shrink-0" style={{ marginTop: CENTER_Y - ROOT_H / 2 }}>
+                    <button
                       type="button"
-                      onClick={() => toggle(b.i)}
-                      aria-expanded={!collapsed.has(b.i)}
-                      title={b.label}
-                      className="absolute flex items-center gap-2 rounded-xl px-3 text-left text-[13px] font-semibold text-[#F4F4F5] bg-[#17171B] cursor-pointer hover:bg-[#1F1F24] transition-colors"
-                      style={{ left: BRANCH_X, top: b.y - NODE_H / 2, width: BRANCH_W, height: NODE_H, border: `1.5px solid ${b.hue}80` }}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.04 * b.i }}
+                      onClick={() => data.summary && setShowSummary((s) => !s)}
+                      aria-expanded={data.summary ? showSummary : undefined}
+                      className={`w-full rounded-2xl bg-[#F4F4F5] text-[#09090B] px-4 text-center text-sm font-semibold leading-snug flex items-center justify-center ${
+                        data.summary ? "cursor-pointer hover:bg-white" : "cursor-default"
+                      }`}
+                      style={{ height: ROOT_H }}
                     >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: b.hue }} />
-                      <span className="line-clamp-2 flex-1 leading-snug">{b.label}</span>
-                      {b.leaves.length > 0 && (
-                        <span className="text-[11px] font-normal text-[#71717A] tabular-nums shrink-0">
-                          {collapsed.has(b.i) ? `+${b.leaves.length}` : ""}
-                        </span>
-                      )}
-                    </motion.button>
+                      <span className="line-clamp-2">{data.root}</span>
+                    </button>
+                    {showSummary && data.summary && (
+                      <p className="mt-2 rounded-xl bg-[#141418] border border-[#27272A] p-3 text-[12.5px] leading-relaxed text-[#D4D4D8]">
+                        {data.summary}
+                      </p>
+                    )}
+                  </div>
+                  <span aria-hidden="true" className="block h-px shrink-0" style={{ width: ARM, marginTop: CENTER_Y, background: LINE }} />
 
-                    {b.shown.map((leaf, li) => {
-                      const Tag = onAsk ? motion.button : motion.div;
+                  {/* Branches */}
+                  <ul>
+                    {data.branches.map((branch, bi) => {
+                      const hue = HUES[bi % HUES.length];
+                      const isOpen = openBranches.has(bi);
                       return (
-                        <Tag
-                          key={li}
-                          {...(onAsk
-                            ? {
-                                type: "button" as const,
-                                onClick: () => {
-                                  onAsk(`Explain this step in simple terms, and tell me exactly how to do it: "${leaf}"`);
-                                  onClose();
-                                },
-                              }
-                            : {})}
-                          title={leaf}
-                          className={`absolute flex items-center rounded-lg px-3 text-left text-[12.5px] leading-snug text-[#D4D4D8] bg-[#111114] border border-[#27272A] ${
-                            onAsk ? "cursor-pointer hover:border-[#3F3F46] hover:text-[#F4F4F5] transition-colors" : ""
-                          }`}
-                          style={{ left: LEAF_X, top: b.leafYs[li] - NODE_H / 2, width: LEAF_W, height: NODE_H, borderLeft: `3px solid ${b.hue}` }}
-                          initial={{ opacity: 0, x: -6 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.04 * b.i + 0.03 * li + 0.08 }}
+                        <li
+                          key={bi}
+                          className="relative flex items-start"
+                          style={{ paddingLeft: ARM, paddingTop: ROW_PAD, paddingBottom: ROW_PAD }}
                         >
-                          <span className="line-clamp-2">{leaf}</span>
-                        </Tag>
+                          <Connector first={bi === 0} last={bi === branchCount - 1} />
+                          <button
+                            type="button"
+                            onClick={() => toggleBranch(bi)}
+                            aria-expanded={isOpen}
+                            title={branch.label}
+                            className="w-56 shrink-0 flex items-start gap-2 rounded-xl px-3 py-2.5 bg-[#17171B] hover:bg-[#1F1F24] border transition-colors cursor-pointer"
+                            style={{ minHeight: NODE_H, borderColor: isOpen ? `${hue}99` : "#27272A" }}
+                          >
+                            <span className="w-2 h-2 rounded-full shrink-0 mt-1.5" style={{ background: hue }} />
+                            <span className="flex-1 line-clamp-2 text-left text-[13px] leading-5 font-semibold text-[#F4F4F5]">
+                              {branch.label}
+                            </span>
+                            <span className="text-[11px] leading-5 text-[#71717A] tabular-nums">{branch.leaves.length}</span>
+                            <ChevronRight
+                              className={`w-3.5 h-3.5 mt-[3px] text-[#71717A] shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                            />
+                          </button>
+
+                          {isOpen && (
+                            <>
+                              <Stub />
+                              <motion.ul
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.18 }}
+                                style={{ marginTop: -ROW_PAD }}
+                              >
+                                {branch.leaves.map((leaf, li) => {
+                                  const key = `${bi}-${li}`;
+                                  const leafOpen = openLeaf === key;
+                                  return (
+                                    <li
+                                      key={key}
+                                      className="relative"
+                                      style={{ paddingLeft: ARM, paddingTop: ROW_PAD, paddingBottom: ROW_PAD }}
+                                    >
+                                      <Connector first={li === 0} last={li === branch.leaves.length - 1} />
+                                      <button
+                                        type="button"
+                                        onClick={() => leaf.detail && setOpenLeaf(leafOpen ? null : key)}
+                                        aria-expanded={leaf.detail ? leafOpen : undefined}
+                                        className={`w-72 text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                                          leaf.detail ? "cursor-pointer hover:border-[#3F3F46]" : "cursor-default"
+                                        } ${leafOpen ? "bg-[#17171B]" : "bg-[#111114] border-[#27272A]"}`}
+                                        style={{ minHeight: NODE_H, borderColor: leafOpen ? `${hue}99` : undefined }}
+                                      >
+                                        <span className="flex items-start justify-between gap-2">
+                                          <span className="text-[13px] leading-5 text-[#E4E4E7]">{leaf.label}</span>
+                                          {leaf.detail && (
+                                            <ChevronRight
+                                              className={`w-3.5 h-3.5 mt-[3px] text-[#71717A] shrink-0 transition-transform ${
+                                                leafOpen ? "rotate-90" : ""
+                                              }`}
+                                            />
+                                          )}
+                                        </span>
+                                        {leafOpen && leaf.detail && (
+                                          <span className="block mt-2 pt-2 border-t border-[#27272A] text-[12.5px] leading-relaxed text-[#D4D4D8]">
+                                            {leaf.detail}
+                                          </span>
+                                        )}
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </motion.ul>
+                            </>
+                          )}
+                        </li>
                       );
                     })}
-                  </div>
-                ))}
-              </div>
+                  </ul>
+                </div>
+              )}
             </div>
           </motion.div>
         </motion.div>

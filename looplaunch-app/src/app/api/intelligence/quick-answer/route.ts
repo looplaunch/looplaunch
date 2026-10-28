@@ -6,7 +6,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/intelligence/store";
+import { getSession, updateSession } from "@/lib/intelligence/store";
+import { canUseSession } from "@/lib/auth/session-access";
 import { answerBuyerQuestion } from "@/lib/ai/gemini";
 
 export async function POST(request: Request) {
@@ -20,12 +21,27 @@ export async function POST(request: Request) {
   }
 
   const session = await getSession(body.sessionId);
-  if (!session) {
+  if (!session || !(await canUseSession(session))) {
     return NextResponse.json({ error: "Session not found or expired" }, { status: 404 });
   }
 
   try {
     const result = await answerBuyerQuestion(question, session.companyIntelligence ?? null);
+
+    // Keep the answer with the analysis, so it shows instantly next time.
+    const fresh = (await getSession(session.id)) ?? session;
+    const market = fresh.marketIntelligence;
+    if (market?.peopleAlsoAsk?.some((p) => p.question === question)) {
+      await updateSession(session.id, {
+        marketIntelligence: {
+          ...market,
+          peopleAlsoAsk: market.peopleAlsoAsk.map((p) =>
+            p.question === question ? { ...p, answer: result.answer, tip: result.tip } : p
+          ),
+        },
+      }).catch(() => {});
+    }
+
     return NextResponse.json(result);
   } catch (e) {
     console.warn("[QuickAnswer] Failed:", e instanceof Error ? e.message : e);

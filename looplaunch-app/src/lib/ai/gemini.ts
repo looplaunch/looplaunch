@@ -61,6 +61,39 @@ function getModel(modelName = "gemini-3.5-flash-lite") {
   });
 }
 
+/** Same model, told to answer in JSON. Lower token caps keep short tasks fast. */
+function getJsonModel(maxOutputTokens: number, temperature = 0.2) {
+  const client = getClient();
+  if (!client) return null;
+
+  return client.getGenerativeModel({
+    model: "gemini-3.5-flash-lite",
+    generationConfig: {
+      temperature,
+      maxOutputTokens,
+      responseMimeType: "application/json",
+    },
+  });
+}
+
+/**
+ * Gemini often answers 503 "high demand" for a few seconds at a time. Retry those
+ * before falling back to demo data, which reads like a generic software playbook.
+ */
+async function withRetry<T>(label: string, fn: () => Promise<T>, waitsMs = [2000, 6000]): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const busy = /\b(503|429)\b|high demand|overloaded|unavailable|fetch failed/i.test(msg);
+      if (!busy || attempt >= waitsMs.length) throw err;
+      console.warn(`[Gemini] ${label}: model busy, retrying in ${waitsMs[attempt] / 1000}s`);
+      await new Promise((r) => setTimeout(r, waitsMs[attempt]));
+    }
+  }
+}
+
 // ──────────────────────────────────────────────
 // JSON Parser Helper
 // ──────────────────────────────────────────────
@@ -552,9 +585,10 @@ export async function analyzeMarket(
   try {
     const prompt = buildMarketAnalysisPrompt(onboarding, searchResults);
     console.log("[Gemini] Analyzing market intelligence via API...");
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return parseJsonResponse<MarketIntelligence>(text);
+    return await withRetry("analyzeMarket", async () => {
+      const result = await model.generateContent(prompt);
+      return parseJsonResponse<MarketIntelligence>(result.response.text());
+    });
   } catch (err) {
     console.warn("[Gemini] analyzeMarket API error, falling back to demo data:", err);
     return getMockMarketIntelligence(onboarding);
@@ -579,15 +613,17 @@ export async function generateDiagnosis(
 
   try {
     const prompt = buildDiagnosisPrompt(
-      JSON.stringify(companyIntel, null, 2),
+      // The raw crawl is huge and already summarized in the profile; leaving it out keeps this call fast.
+      JSON.stringify(companyIntel, (key, value) => (key === "rawCrawlData" ? undefined : value), 2),
       JSON.stringify(competitorIntel, null, 2),
       JSON.stringify(marketIntel, null, 2),
       onboarding
     );
     console.log("[Gemini] Generating strategic diagnosis via API...");
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const parsed = parseJsonResponse<StrategicDiagnosis>(text);
+    const parsed = await withRetry("generateDiagnosis", async () => {
+      const result = await model.generateContent(prompt);
+      return parseJsonResponse<StrategicDiagnosis>(result.response.text());
+    });
 
     return {
       ...parsed,
@@ -753,7 +789,7 @@ export async function answerBuyerQuestion(
   question: string,
   company: Pick<CompanyIntelligence, "name" | "industry" | "description"> | null
 ): Promise<BuyerQuestionAnswer> {
-  const model = getModel();
+  const model = getJsonModel(500, 0.3);
   if (!model) throw new Error("GEMINI_API_KEY not configured");
 
   const about = company
@@ -781,4 +817,138 @@ Reply with JSON only, no markdown:
     }
   }
   throw lastError;
+}
+
+/**
+ * Answers several buyer questions in one call, so the search intel panel can show
+ * answers instantly. Returns whatever it could answer; never throws.
+ */
+export async function answerBuyerQuestions(
+  questions: string[],
+  company: Pick<CompanyIntelligence, "name" | "industry" | "description"> | null
+): Promise<Array<BuyerQuestionAnswer & { question: string }>> {
+  const model = getJsonModel(3000, 0.3);
+  if (!model || questions.length === 0) return [];
+
+  const about = company
+    ? `The brand is ${company.name} (${company.industry}). ${company.description}`.slice(0, 600)
+    : "The brand is a small business.";
+
+  const prompt = `People search Google for these questions:
+${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+
+${about}
+
+For every question, write:
+- "answer": a clear, neutral answer in 2-3 short sentences for a normal person. No hype.
+- "tip": one sentence on exactly how this brand can use the question in its marketing (a post, a page, an FAQ, a video). Start with a verb.
+
+Reply with JSON only: {"answers": [{"n": 1, "answer": "...", "tip": "..."}]}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const parsed = parseJsonResponse<{ answers?: Array<{ n?: number; answer?: string; tip?: string }> }>(
+      result.response.text()
+    );
+    return (parsed.answers || [])
+      .filter((a) => typeof a.n === "number" && a.n >= 1 && a.n <= questions.length && a.answer)
+      .map((a) => ({
+        question: questions[(a.n as number) - 1],
+        answer: (a.answer as string).trim(),
+        tip: (a.tip || "").trim(),
+      }));
+  } catch (e) {
+    console.warn("[Gemini] answerBuyerQuestions failed:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+/** One numbered Google result shown to the model when it picks out competitors. */
+export interface SearchEvidence {
+  n: number;
+  kind: "organic" | "ad" | "article";
+  title: string;
+  domain: string;
+  snippet: string;
+}
+
+export interface IdentifiedCompetitor {
+  name: string;
+  domain: string;
+  type: "direct" | "indirect" | "marketplace";
+  /** 0-100: how close their product is to this business's product */
+  similarity: number;
+  /** One plain sentence: what they sell and why they compete */
+  why: string;
+  /** Numbers of the search results that mention them */
+  evidence: number[];
+}
+
+/**
+ * Reads real Google results and names the companies that actually compete with this
+ * business, skipping news sites, blogs and review articles that only mention the
+ * product. Returns null when the model is unavailable, so callers can fall back.
+ */
+export async function identifyCompetitors(
+  company: Pick<CompanyIntelligence, "name" | "website" | "industry" | "description" | "targetSegments"> & {
+    category?: string;
+    likelyCompetitors?: CompanyIntelligence["likelyCompetitors"];
+  },
+  evidence: SearchEvidence[]
+): Promise<IdentifiedCompetitor[] | null> {
+  const model = getJsonModel(3000, 0.1);
+  if (!model) return null;
+
+  let ownDomain = "";
+  try {
+    ownDomain = new URL(company.website).hostname.replace(/^www\./, "");
+  } catch {
+    ownDomain = company.website;
+  }
+
+  const suspects = (company.likelyCompetitors || [])
+    .map((c) => (c.domain ? `${c.name} (${c.domain})` : c.name))
+    .join(", ");
+
+  const prompt = `You are finding the real competitors of a business from Google search results.
+
+BUSINESS: ${company.name} (${ownDomain})
+Sells: ${company.category || company.industry}. ${company.description}
+Buyers: ${(company.targetSegments || []).join(", ") || "not stated"}
+Brands we already suspect: ${suspects || "none"}
+
+GOOGLE RESULTS:
+${evidence
+  .map((e) => `${e.n}. [${e.kind}] ${e.title} | ${e.domain} | ${e.snippet}`)
+  .join("\n")}
+
+A competitor is a company or brand that sells a similar product to the same buyers.
+- "direct": same kind of product (another smartphone brand for a phone maker, another thrift store for a thrift store).
+- "indirect": a different product that solves the same need.
+- "marketplace": a store or marketplace where these buyers compare and buy this kind of product.
+NOT competitors: news sites, magazines, blogs, review and comparison articles, forums, social networks, search engines, encyclopedias, finance sites, and ${company.name} itself (${ownDomain}).
+Use each brand's official website domain, not the domain of an article that mentions it. Include a suspected brand only if the results or your knowledge confirm it competes.
+
+Reply with JSON only, at most 12 competitors, strongest first:
+{"competitors": [{"name": "Brand", "domain": "brand.com", "type": "direct", "similarity": 0-100, "why": "One plain sentence: what they sell and why buyers compare them.", "evidence": [1, 4]}]}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const parsed = parseJsonResponse<{ competitors?: Array<Partial<IdentifiedCompetitor>> }>(result.response.text());
+    const types = new Set(["direct", "indirect", "marketplace"]);
+    return (parsed.competitors || [])
+      .filter((c) => c.name && c.domain && types.has(c.type as string))
+      .map((c) => ({
+        name: String(c.name).trim(),
+        domain: String(c.domain).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""),
+        type: c.type as IdentifiedCompetitor["type"],
+        similarity: Math.max(0, Math.min(100, Number(c.similarity) || 50)),
+        why: String(c.why || "").trim(),
+        evidence: Array.isArray(c.evidence) ? c.evidence.filter((n) => typeof n === "number") : [],
+      }))
+      .filter((c) => c.domain !== ownDomain);
+  } catch (e) {
+    console.warn("[Gemini] identifyCompetitors failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }

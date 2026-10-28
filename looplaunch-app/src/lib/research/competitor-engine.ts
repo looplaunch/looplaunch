@@ -1,22 +1,17 @@
 /**
  * Competitor Discovery & Verification Engine
  *
- * Implements an industry-aware research pipeline:
- * 1. Generates 8–12 targeted search queries based on the business profile.
- * 2. Uses SerpApi (Google search, Google Ads, Google Shopping) and Tavily to collect live results.
- * 3. Extracts candidate competitor names and normalized domains.
- * 4. Deduplicates candidates and filters out non-commercial entities (social, wikis, portals).
- * 5. Investigates candidate offerings from collected evidence and snippets.
- * 6. Scores competitors using a 6-factor heuristic (0–100):
- *    - Product similarity (0–30)
- *    - Audience overlap (0–20)
- *    - Business model alignment (0–15)
- *    - Geography match (0–10)
- *    - Search intent presence (0–15)
- *    - Pricing tier compatibility (0–10)
- * 7. Categorizes candidates: direct, indirect, marketplace, publisher, or irrelevant.
- * 8. Queries Google Ads Transparency Center for verified competitors.
- * 9. Extracts common market messaging patterns and strategic opportunities.
+ * 1. Builds up to 6 Google searches from what the business really sells (the profiler's
+ *    plain-English category and the searches real buyers type), not from industry labels.
+ * 2. Runs them through SerpApi (organic results, ads, People Also Ask, inline shopping),
+ *    plus a dedicated ad search for the buying-intent ones.
+ * 3. Asks Gemini to read those results and name the real competitors, skipping news sites,
+ *    blogs and review articles that only mention the product. Falls back to heuristics
+ *    when Gemini is unavailable.
+ * 4. Scores each competitor (0-100) from product similarity plus how often they show up
+ *    and advertise on the same searches.
+ * 5. Checks the Google Ads Transparency Center for the top direct competitors.
+ * 6. Summarizes ad messaging and a few data-driven opportunities and threats.
  */
 
 import {
@@ -24,11 +19,11 @@ import {
   searchKeywordAds,
   searchAdvertiserTransparency,
   searchGoogleShopping,
-  type GoogleAd,
   type PeopleAlsoAskQuestion,
   type OrganicSearchResult,
 } from "./serpapi";
-import { runMarketResearch } from "./tavily";
+import { searchTavily } from "./tavily";
+import { identifyCompetitors, type IdentifiedCompetitor, type SearchEvidence } from "../ai/gemini";
 import type {
   CompanyIntelligence,
   CompetitorIntelligence,
@@ -37,28 +32,29 @@ import type {
   KeywordAdResult,
   ShoppingProduct,
   SearchQuerySignal,
-  AdvertiserAdCreative,
+  TavilySearchResult,
 } from "../intelligence/types";
 
-// Known aggregators / marketplaces
+// Stores and marketplaces where buyers compare products
 const KNOWN_MARKETPLACES = new Set([
   "amazon.com",
+  "amazon.in",
+  "flipkart.com",
   "etsy.com",
   "ebay.com",
   "walmart.com",
   "target.com",
+  "bestbuy.com",
   "capterra.com",
   "g2.com",
   "softwareadvice.com",
-  "trustpilot.com",
   "getapp.com",
   "producthunt.com",
   "appsumo.com",
-  "shopify.com/app-store",
   "apps.shopify.com",
 ]);
 
-// Known editorial publishers / blogs / review sites
+// News, review and reference sites that mention products but don't sell them
 const KNOWN_PUBLISHERS = new Set([
   "forbes.com",
   "techcrunch.com",
@@ -69,18 +65,39 @@ const KNOWN_PUBLISHERS = new Set([
   "investopedia.com",
   "zdnet.com",
   "pcmag.com",
-  "hubspot.com/blog",
-  "zapier.com/blog",
-  "wirecutter.com",
+  "cnet.com",
+  "techradar.com",
+  "tomsguide.com",
+  "gsmarena.com",
+  "androidauthority.com",
+  "macrumors.com",
+  "9to5mac.com",
+  "engadget.com",
+  "mashable.com",
+  "digitaltrends.com",
+  "finance.yahoo.com",
+  "yahoo.com",
+  "msn.com",
+  "reuters.com",
+  "bloomberg.com",
+  "cnbc.com",
+  "bbc.com",
+  "cnn.com",
   "nytimes.com",
+  "wirecutter.com",
   "medium.com",
   "substack.com",
+  "memeburn.com",
+  "trustpilot.com",
 ]);
 
-// Non-competitor platforms (social media, search engines, encyclopedias)
+const PUBLISHER_HINT = /\b(news|blog|magazine|journal|tribune|gazette|herald|reviews?|wiki|forum)\b/i;
+
+// Platforms that show up everywhere but are never competitors
 const IGNORED_DOMAINS = new Set([
   "google.com",
   "google.co.uk",
+  "google.co.in",
   "google.ca",
   "youtube.com",
   "facebook.com",
@@ -92,14 +109,31 @@ const IGNORED_DOMAINS = new Set([
   "pinterest.com",
   "tiktok.com",
   "wikipedia.org",
-  "apple.com",
-  "microsoft.com",
+  "en.wikipedia.org",
   "github.com",
   "quora.com",
   "yelp.com",
   "glassdoor.com",
   "indeed.com",
 ]);
+
+// SerpApi needs a real country for `location` and `gl`; anything vaguer searches the US.
+const COUNTRIES: Array<[RegExp, string, string]> = [
+  [/united states|\busa?\b|america/i, "United States", "us"],
+  [/united kingdom|\buk\b|england|britain/i, "United Kingdom", "uk"],
+  [/india/i, "India", "in"],
+  [/canada/i, "Canada", "ca"],
+  [/australia/i, "Australia", "au"],
+  [/germany/i, "Germany", "de"],
+  [/france/i, "France", "fr"],
+  [/singapore/i, "Singapore", "sg"],
+  [/united arab emirates|\buae\b|dubai/i, "United Arab Emirates", "ae"],
+];
+
+function searchCountry(geography?: string): { location: string; gl: string } {
+  const match = geography ? COUNTRIES.find(([re]) => re.test(geography)) : undefined;
+  return match ? { location: match[1], gl: match[2] } : { location: "United States", gl: "us" };
+}
 
 function normalizeDomain(urlOrDomain: string): string {
   try {
@@ -114,6 +148,25 @@ function normalizeDomain(urlOrDomain: string): string {
   }
 }
 
+/** "https://www.bestbuy.com › iphone" → "bestbuy.com" */
+function domainFromDisplayedLink(displayed: string): string {
+  const first = displayed.replace(/^https?:\/\//i, "").split(/[\s›/]/)[0] || "";
+  return first.toLowerCase().replace(/^www\./, "");
+}
+
+/** Ad links are often Google tracking URLs; the displayed link names the real advertiser. */
+function adDomain(ad: { link?: string; displayedLink?: string }): string {
+  const fromLink = ad.link ? normalizeDomain(ad.link) : "";
+  if (fromLink && !/google|doubleclick/.test(fromLink)) return fromLink;
+  return ad.displayedLink ? domainFromDisplayedLink(ad.displayedLink) : fromLink;
+}
+
+function isPublisher(domain: string, titles: string[] = []): boolean {
+  if (KNOWN_PUBLISHERS.has(domain)) return true;
+  if ([...KNOWN_PUBLISHERS].some((p) => domain.endsWith(`.${p}`))) return true;
+  return PUBLISHER_HINT.test(domain) || titles.some((t) => /^(the )?\d+ best|top \d+|best .* of 20\d\d/i.test(t));
+}
+
 function extractBrandName(title: string, domain: string): string {
   if (title) {
     const parts = title.split(/[|\-–—:]/);
@@ -126,78 +179,74 @@ function extractBrandName(title: string, domain: string): string {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
-// ──────────────────────────────────────────────
-// 1. Generate 8–12 Targeted Search Queries
-// ──────────────────────────────────────────────
+function clip(text: string | undefined, max: number): string {
+  const t = (text || "").replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
 
-export function generateDiscoveryQueries(profile: CompanyIntelligence): SearchQuerySignal[] {
-  const brand = profile.name || "brand";
-  const core = profile.products[0] || profile.valueProposition || "product";
-  const industry = profile.industry || "software";
-  const audience = profile.targetSegments[0] || "buyers";
-  const geo = profile.geography && profile.geography !== "unspecified" ? profile.geography : "";
-
-  const queries: SearchQuerySignal[] = [
-    // 1. High-intent commercial queries
-    {
-      query: `best ${core} ${geo}`.trim(),
-      intent: "commercial",
-    },
-    {
-      query: `top ${core} tools for ${audience}`.trim(),
-      intent: "commercial",
-    },
-    {
-      query: `${core} software buy online`.trim(),
-      intent: "commercial",
-    },
-
-    // 2. Direct competitor & alternative queries
-    {
-      query: `${brand} alternatives and competitors`.trim(),
-      intent: "brand_alternative",
-    },
-    {
-      query: `top alternatives to ${core}`.trim(),
-      intent: "brand_alternative",
-    },
-    {
-      query: `leading competitors in ${industry}`.trim(),
-      intent: "brand_alternative",
-    },
-
-    // 3. Category & sub-industry queries
-    {
-      query: `${industry} platforms for ${audience}`.trim(),
-      intent: "category",
-    },
-    {
-      query: `${profile.subIndustry || industry} market leaders`.trim(),
-      intent: "category",
-    },
-
-    // 4. Pain-point / solution queries
-    {
-      query: `how to solve ${profile.weaknesses?.[0] || "scaling"} with ${core}`.trim(),
-      intent: "solution_pain",
-    },
-    {
-      query: `${core} for ${audience} reviews comparison`.trim(),
-      intent: "solution_pain",
-    },
-
-    // 5. Pricing & transactional queries
-    {
-      query: `${core} pricing plans cost`.trim(),
-      intent: "pricing",
-    },
-  ];
-
-  return queries.slice(0, 11);
+/** First price-looking phrase in the snippets, e.g. "From $799" or "$12/month". */
+function findPrice(snippets: string[]): string | undefined {
+  const re = /(?:(?:from|starting at|starts at)\s+)?(?:US|Rs\.?|₹|£|€)?\s?[$₹£€]\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:\/|per)\s*(?:mo|month|yr|year))?/i;
+  for (const s of snippets) {
+    const m = s.match(re);
+    if (m) {
+      const price = m[0].trim();
+      return price.charAt(0).toUpperCase() + price.slice(1);
+    }
+  }
+  return undefined;
 }
 
 // ──────────────────────────────────────────────
-// 2. Candidate Domain Collector & Scorer
+// 1. Search plan
+// ──────────────────────────────────────────────
+
+function categoryOf(profile: CompanyIntelligence): string {
+  return (profile.category || profile.subIndustry || profile.products?.[0] || profile.industry || "")
+    .toLowerCase()
+    .trim();
+}
+
+function intentOf(query: string): SearchQuerySignal["intent"] {
+  if (/\b(price|prices|cost|cheap|deal|deals|discount|offer)\b|\$/.test(query)) return "pricing";
+  if (/\b(vs|versus|alternatives?|competitors?|like)\b/.test(query)) return "brand_alternative";
+  return "commercial";
+}
+
+/** Up to 6 searches a real buyer of this business would type. */
+export function generateDiscoveryQueries(profile: CompanyIntelligence): SearchQuerySignal[] {
+  const brand = (profile.name || "").trim();
+  const category = categoryOf(profile);
+  const queries: SearchQuerySignal[] = [];
+  const seen = new Set<string>();
+
+  // "best smartphones" and "best smartphone 2026" cost two credits for the same results.
+  const keyOf = (query: string) =>
+    query
+      .split(" ")
+      .map((w) => w.replace(/\d+/g, "").replace(/s$/, ""))
+      .filter(Boolean)
+      .sort()
+      .join(" ");
+
+  const add = (raw: string) => {
+    const query = raw.toLowerCase().replace(/\s+/g, " ").trim();
+    const key = keyOf(query);
+    if (query.length < 3 || seen.has(key)) return;
+    seen.add(key);
+    queries.push({ query, intent: intentOf(query) });
+  };
+
+  if (brand) add(`${brand} alternatives`);
+  if (category) add(`best ${category}`);
+  for (const term of profile.searchTerms || []) add(term);
+  if (category) add(`${category} price`);
+
+  return queries.slice(0, 6);
+}
+
+// ──────────────────────────────────────────────
+// 2. Candidates and scoring
 // ──────────────────────────────────────────────
 
 interface RawCandidate {
@@ -223,14 +272,123 @@ export interface CompetitorEngineResult {
   strategicThreats: string[];
 }
 
-export async function runCompetitorDiscoveryEngine(
+/** All search evidence for a domain, including subdomains (news.samsung.com counts for samsung.com). */
+function candidateStats(raw: Map<string, RawCandidate>, domain: string) {
+  const matches = [...raw.values()].filter((c) => c.domain === domain || c.domain.endsWith(`.${domain}`));
+  const queries = new Set<string>();
+  for (const m of matches) m.discoveryQueries.forEach((q) => queries.add(q));
+  return {
+    appearances: queries.size,
+    queries: [...queries],
+    snippets: matches.flatMap((m) => m.snippets),
+    titles: matches.flatMap((m) => m.titles),
+    organicRankings: matches.flatMap((m) => m.organicRankings),
+    sponsoredRankings: matches.flatMap((m) => m.sponsoredRankings),
+  };
+}
+
+function scoreBreakdown(
+  type: CompetitorCategory,
+  similarity: number,
+  appearances: number,
+  runsAds: boolean,
+  hasPrice: boolean
+): CompetitorScoreBreakdown {
+  return {
+    productSimilarity: Math.round(similarity * 0.3),
+    audienceOverlap: type === "direct" ? Math.round(10 + similarity * 0.1) : Math.round(6 + similarity * 0.08),
+    businessModel: type === "direct" ? 13 : type === "indirect" ? 9 : 6,
+    geography: 8,
+    searchIntent: Math.min(15, appearances * 3 + (runsAds ? 4 : 0)),
+    pricingPosition: hasPrice ? 8 : 5,
+  };
+}
+
+const total = (b: CompetitorScoreBreakdown) =>
+  b.productSimilarity + b.audienceOverlap + b.businessModel + b.geography + b.searchIntent + b.pricingPosition;
+
+function toCompetitor(
+  input: { name: string; domain: string; type: CompetitorCategory; similarity: number; why?: string },
+  raw: Map<string, RawCandidate>,
   profile: CompanyIntelligence
-): Promise<CompetitorEngineResult> {
+): CompetitorIntelligence {
+  const stats = candidateStats(raw, input.domain);
+  const runsAds = stats.sponsoredRankings.length > 0;
+  const pricing = findPrice(stats.snippets);
+  const breakdown = scoreBreakdown(input.type, input.similarity, stats.appearances, runsAds, Boolean(pricing));
+
+  const strengths: string[] = [];
+  if (stats.appearances > 0) strengths.push(`Shows up on Google for ${stats.appearances} of the searches your buyers make`);
+  if (runsAds) strengths.push("Pays for Google ads on those searches");
+
+  return {
+    name: input.name,
+    domain: input.domain,
+    website: `https://${input.domain}`,
+    description: clip(input.why || stats.snippets[0] || `${input.name} sells ${categoryOf(profile)}.`, 260),
+    valueProposition: clip(stats.titles[0] || input.why || input.name, 140),
+    products: [],
+    targetSegments: profile.targetSegments,
+    strengths,
+    weaknesses: [],
+    marketingChannels: runsAds ? ["Google Search Ads", "Organic Search"] : stats.appearances > 0 ? ["Organic Search"] : [],
+    contentStrategy: "",
+    differentiators: [],
+    pricing,
+    category: input.type,
+    score: total(breakdown),
+    scoreBreakdown: breakdown,
+    scoringRationale: `Product similarity ${input.similarity}/100, seen in ${stats.appearances} buyer searches${runsAds ? ", runs Google ads" : ""}.`,
+    discoveryQueries: stats.queries,
+    organicRankings: stats.organicRankings,
+    sponsoredRankings: stats.sponsoredRankings,
+    transparencyStatus: "not_verified",
+    creatives: [],
+    evidenceSnippet: stats.snippets[0] || "",
+    verifiedAt: new Date().toISOString(),
+  };
+}
+
+/** Used only when Gemini can't read the results: keep real sellers that keep showing up. */
+function heuristicCompetitors(
+  raw: Map<string, RawCandidate>,
+  profile: CompanyIntelligence
+): Array<{ name: string; domain: string; type: CompetitorCategory; similarity: number }> {
+  const out: Array<{ name: string; domain: string; type: CompetitorCategory; similarity: number }> = [];
+
+  for (const lc of profile.likelyCompetitors || []) {
+    if (lc.domain) {
+      out.push({ name: lc.name, domain: normalizeDomain(lc.domain), type: lc.type || "direct", similarity: 75 });
+    }
+  }
+
+  for (const [domain, cand] of raw.entries()) {
+    if (out.some((c) => c.domain === domain) || isPublisher(domain, cand.titles)) continue;
+    const marketplace = KNOWN_MARKETPLACES.has(domain);
+    const appearances = cand.discoveryQueries.size;
+    const runsAds = cand.sponsoredRankings.length > 0;
+    if (!marketplace && appearances < 2 && !runsAds) continue;
+    out.push({
+      name: cand.name,
+      domain,
+      type: marketplace ? "marketplace" : "indirect",
+      similarity: marketplace ? 40 : Math.min(70, 45 + appearances * 5),
+    });
+  }
+  return out;
+}
+
+// ──────────────────────────────────────────────
+// 3. Engine
+// ──────────────────────────────────────────────
+
+export async function runCompetitorDiscoveryEngine(profile: CompanyIntelligence): Promise<CompetitorEngineResult> {
   const userDomain = normalizeDomain(profile.website || "");
   const queries = generateDiscoveryQueries(profile);
-  const userLocation = profile.geography && profile.geography !== "unspecified" ? profile.geography : "United States";
+  const { location, gl } = searchCountry(profile.geography);
+  const category = categoryOf(profile);
 
-  console.log(`[CompetitorEngine] Starting research for ${profile.name} (${userDomain}) with ${queries.length} queries`);
+  console.log(`[CompetitorEngine] ${profile.name} (${userDomain}), category "${category}", ${queries.length} searches in ${location}`);
 
   const rawCandidates = new Map<string, RawCandidate>();
   const collectedAds: KeywordAdResult[] = [];
@@ -238,19 +396,8 @@ export async function runCompetitorDiscoveryEngine(
   const collectedOrganic: OrganicSearchResult[] = [];
   const collectedShopping: ShoppingProduct[] = [];
 
-  // Helper to record candidate
-  const recordCandidate = (
-    url: string,
-    title: string,
-    snippet: string,
-    query: string,
-    isAd: boolean,
-    position: number
-  ) => {
-    const domain = normalizeDomain(url);
-    if (!domain || domain === userDomain || IGNORED_DOMAINS.has(domain)) {
-      return;
-    }
+  const recordCandidate = (domain: string, title: string, snippet: string, query: string, isAd: boolean, position: number, link: string) => {
+    if (!domain || domain === userDomain || domain.endsWith(`.${userDomain}`) || IGNORED_DOMAINS.has(domain)) return;
 
     if (!rawCandidates.has(domain)) {
       rawCandidates.set(domain, {
@@ -264,327 +411,213 @@ export async function runCompetitorDiscoveryEngine(
         sponsoredRankings: [],
       });
     }
-
     const candidate = rawCandidates.get(domain)!;
     candidate.discoveryQueries.add(query);
     if (snippet && !candidate.snippets.includes(snippet)) candidate.snippets.push(snippet);
     if (title && !candidate.titles.includes(title)) candidate.titles.push(title);
-
-    if (isAd) {
-      candidate.sponsoredRankings.push({ query, position, title, link: url, snippet });
-    } else {
-      candidate.organicRankings.push({ query, position, title, link: url, snippet });
-    }
+    (isAd ? candidate.sponsoredRankings : candidate.organicRankings).push({ query, position, title, link, snippet });
   };
 
-  // ── Execute Search Queries in Bounded Parallel Batches ──
-  // 3 queries per batch to avoid overwhelming rate limits
+  const addAd = (ad: KeywordAdResult) => {
+    const domain = adDomain(ad);
+    if (collectedAds.some((a) => a.title === ad.title && adDomain(a) === domain)) return;
+    collectedAds.push(ad);
+    recordCandidate(domain, ad.title, ad.snippet || "", ad.query, true, ad.position, ad.link);
+  };
+
+  // ── Google searches: organic, ads, People Also Ask and inline shopping (1 SerpApi credit each) ──
   const BATCH_SIZE = 3;
   for (let i = 0; i < queries.length; i += BATCH_SIZE) {
-    const batch = queries.slice(i, i + BATCH_SIZE);
-    const searchPromises = batch.map(async (qSig) => {
-      const q = qSig.query;
-      try {
-        // Run Google Search (Organic + PAA + Ads)
-        const serp = await searchGoogleIntelligence(q, { location: userLocation });
-        if (serp) {
-          qSig.totalOrganicResults = serp.organicResults.length;
-          qSig.totalAds = serp.ads.length;
+    await Promise.allSettled(
+      queries.slice(i, i + BATCH_SIZE).map(async (qSig) => {
+        const q = qSig.query;
+        const serp = await searchGoogleIntelligence(q, { location, gl });
+        if (!serp) return;
+        qSig.totalOrganicResults = serp.organicResults.length;
+        qSig.totalAds = serp.ads.length;
 
-          // Record Ads
-          for (const ad of serp.ads) {
-            recordCandidate(ad.link || ad.displayedLink || "", ad.title, ad.snippet || "", q, true, ad.position);
-          }
+        serp.ads.forEach((ad, idx) =>
+          addAd({
+            id: `ad_g_${idx}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            position: ad.position,
+            blockPosition: ad.blockPosition,
+            title: ad.title,
+            link: ad.link,
+            displayedLink: ad.displayedLink,
+            trackingLink: ad.trackingLink,
+            snippet: ad.snippet,
+            advertiserName: ad.advertiserName,
+            sitelinks: ad.sitelinks,
+            query: q,
+            location,
+            collectedAt: serp.collectedAt,
+          })
+        );
 
-          // Record PAA
-          for (const paa of serp.peopleAlsoAsk) {
-            if (!collectedPaa.some((p) => p.question.toLowerCase() === paa.question.toLowerCase())) {
-              collectedPaa.push(paa);
-            }
-          }
-
-          // Record Organic
-          for (const org of serp.organicResults) {
-            recordCandidate(org.link, org.title, org.snippet || "", q, false, org.position);
-            collectedOrganic.push(org);
-          }
-
-          // Record Shopping if available
-          if (serp.shoppingResults) {
-            for (const sp of serp.shoppingResults) {
-              if (!collectedShopping.some((s) => s.link === sp.link)) {
-                collectedShopping.push(sp);
-              }
-            }
+        for (const paa of serp.peopleAlsoAsk) {
+          if (paa.question && !collectedPaa.some((p) => p.question.toLowerCase() === paa.question.toLowerCase())) {
+            collectedPaa.push(paa);
           }
         }
 
-        // Run dedicated Keyword Ads search
-        const kwAds = await searchKeywordAds(q, { location: userLocation });
-        for (const ad of kwAds) {
-          collectedAds.push(ad);
-          recordCandidate(ad.link || ad.displayedLink || "", ad.title, ad.snippet || "", q, true, ad.position);
+        for (const org of serp.organicResults) {
+          recordCandidate(normalizeDomain(org.link), org.title, org.snippet || "", q, false, org.position, org.link);
+          collectedOrganic.push(org);
         }
-      } catch (err) {
-        console.warn(`[CompetitorEngine] Error executing query "${q}":`, err);
-      }
-    });
 
-    await Promise.allSettled(searchPromises);
-  }
-
-  // Supplementary Tavily market search
-  try {
-    const tavilyData = await runMarketResearch(
-      `${profile.industry} ${profile.products[0] || ""}`,
-      profile.targetSegments[0] || "",
-      ""
+        for (const sp of serp.shoppingResults || []) {
+          if (!collectedShopping.some((s) => s.link === sp.link)) collectedShopping.push(sp);
+        }
+      })
     );
-    for (const res of tavilyData.allResults) {
-      recordCandidate(res.url, res.title, res.content, "tavily_market_research", false, 1);
-    }
-  } catch (err) {
-    console.warn("[CompetitorEngine] Tavily market search error:", err);
   }
 
-  // Also query Google Shopping for e-commerce / physical product companies
-  if (
-    profile.industry.toLowerCase().includes("ecommerce") ||
-    profile.industry.toLowerCase().includes("fashion") ||
-    profile.industry.toLowerCase().includes("food") ||
-    profile.industry.toLowerCase().includes("retail") ||
-    profile.products.some((p) => /shirt|apparel|shoe|bottle|snack|drink|supplement/i.test(p))
-  ) {
+  // ── Dedicated ad search, only for buying-intent searches (research searches rarely show ads) ──
+  const adQueries = queries.filter((q) => q.intent === "commercial" || q.intent === "pricing").slice(0, 3);
+  await Promise.allSettled(
+    adQueries.map(async (qSig) => {
+      const ads = await searchKeywordAds(qSig.query, { location, gl });
+      ads.forEach(addAd);
+    })
+  );
+
+  // ── One article search naming the main brands: evidence for Gemini, never a competitor itself ──
+  let articles: TavilySearchResult[] = [];
+  if (category) {
     try {
-      const shopItems = await searchGoogleShopping(queries[0].query, { location: userLocation });
+      const res = await searchTavily({
+        query: `top ${category} brands ${new Date().getFullYear()}`,
+        searchDepth: "basic",
+        maxResults: 6,
+      });
+      if (res.success) articles = res.results;
+    } catch (err) {
+      console.warn("[CompetitorEngine] Tavily brand search error:", err);
+    }
+  }
+
+  // ── Google Shopping for physical products ──
+  if (profile.sellsPhysicalProducts && category) {
+    try {
+      const shopItems = await searchGoogleShopping(category, { location, gl });
       for (const item of shopItems) {
-        if (!collectedShopping.some((s) => s.link === item.link)) {
-          collectedShopping.push(item);
-        }
-        if (item.link) {
-          recordCandidate(item.link, item.title, item.price || "", queries[0].query, false, item.position);
-        }
+        if (!collectedShopping.some((s) => s.link === item.link)) collectedShopping.push(item);
       }
     } catch {
       // Non-fatal
     }
   }
 
-  console.log(`[CompetitorEngine] Extracted ${rawCandidates.size} unique candidate domains`);
+  console.log(`[CompetitorEngine] ${rawCandidates.size} domains, ${collectedAds.length} ads, ${collectedPaa.length} questions`);
 
-  // ─── 3. Score and Categorize Each Candidate ───
-  const verifiedList: CompetitorIntelligence[] = [];
+  // ─── Pick the real competitors ───
+  const evidence: SearchEvidence[] = [];
+  const seenEvidence = new Set<string>();
+  const pushEvidence = (kind: SearchEvidence["kind"], title: string, domain: string, snippet: string) => {
+    const key = `${domain}|${title}`;
+    if (!domain || seenEvidence.has(key) || evidence.length >= 60) return;
+    seenEvidence.add(key);
+    evidence.push({ n: evidence.length + 1, kind, title: clip(title, 110), domain, snippet: clip(snippet, 180) });
+  };
+  collectedAds.forEach((a) => pushEvidence("ad", a.title, adDomain(a), a.snippet || ""));
+  collectedOrganic.forEach((o) => pushEvidence("organic", o.title, normalizeDomain(o.link), o.snippet || ""));
+  articles.forEach((a) => pushEvidence("article", a.title, normalizeDomain(a.url), a.content));
 
-  for (const [domain, cand] of rawCandidates.entries()) {
-    const fullText = (cand.titles.join(" ") + " " + cand.snippets.join(" ")).toLowerCase();
-    const queryOverlapCount = cand.discoveryQueries.size;
-    const isMarketplace = KNOWN_MARKETPLACES.has(domain) || /marketplace|directory|comparison-tool/i.test(fullText);
-    const isPublisher = KNOWN_PUBLISHERS.has(domain) || /magazine|blog|reviews|news|top 10 best/i.test(cand.titles.join(" ").toLowerCase());
+  let picked: Array<{ name: string; domain: string; type: CompetitorCategory; similarity: number; why?: string }>;
+  const identified: IdentifiedCompetitor[] | null =
+    evidence.length > 0 || (profile.likelyCompetitors?.length ?? 0) > 0
+      ? await identifyCompetitors(profile, evidence)
+      : null;
 
-    // Compute 6-factor heuristic score (0 - 100)
-    const breakdown: CompetitorScoreBreakdown = {
-      productSimilarity: 0,
-      audienceOverlap: 0,
-      businessModel: 0,
-      geography: 0,
-      searchIntent: 0,
-      pricingPosition: 0,
-    };
-
-    // Factor 1: Product similarity (0 - 30)
-    for (const prod of profile.products) {
-      const terms = prod.toLowerCase().split(/\s+/).filter((t) => t.length > 3);
-      const matches = terms.filter((t) => fullText.includes(t));
-      if (matches.length > 0) {
-        breakdown.productSimilarity = Math.min(30, breakdown.productSimilarity + matches.length * 8);
-      }
-    }
-    if (breakdown.productSimilarity === 0) {
-      // Check industry match
-      const indTerms = profile.industry.toLowerCase().split(/\s+/).filter((t) => t.length > 3);
-      if (indTerms.some((t) => fullText.includes(t))) {
-        breakdown.productSimilarity = 12;
-      }
-    }
-
-    // Factor 2: Audience overlap (0 - 20)
-    for (const aud of profile.targetSegments) {
-      const audTerms = aud.toLowerCase().split(/\s+/).filter((t) => t.length > 3);
-      if (audTerms.some((t) => fullText.includes(t))) {
-        breakdown.audienceOverlap = Math.min(20, breakdown.audienceOverlap + 10);
-      }
-    }
-    if (breakdown.audienceOverlap === 0) breakdown.audienceOverlap = 8; // base baseline
-
-    // Factor 3: Business model alignment (0 - 15)
-    if (profile.businessModel) {
-      const bm = profile.businessModel.toLowerCase();
-      if (
-        (bm.includes("saas") && /software|cloud|platform|app|login|demo/i.test(fullText)) ||
-        (bm.includes("e-commerce") && /cart|checkout|shop|order|shipping/i.test(fullText)) ||
-        (bm.includes("agency") && /agency|consulting|services|clients/i.test(fullText))
-      ) {
-        breakdown.businessModel = 15;
-      } else {
-        breakdown.businessModel = 8;
-      }
-    } else {
-      breakdown.businessModel = 10;
-    }
-
-    // Factor 4: Geography (0 - 10)
-    breakdown.geography = 8; // In SERP searches scoped to userLocation
-
-    // Factor 5: Search intent presence (0 - 15)
-    // How many queries surfaced them?
-    breakdown.searchIntent = Math.min(15, queryOverlapCount * 4 + (cand.sponsoredRankings.length > 0 ? 3 : 0));
-
-    // Factor 6: Pricing position comparability (0 - 10)
-    if (/pricing|plans|\$|free trial|quote/i.test(fullText)) {
-      breakdown.pricingPosition = 9;
-    } else {
-      breakdown.pricingPosition = 5;
-    }
-
-    const totalScore =
-      breakdown.productSimilarity +
-      breakdown.audienceOverlap +
-      breakdown.businessModel +
-      breakdown.geography +
-      breakdown.searchIntent +
-      breakdown.pricingPosition;
-
-    // Determine category
-    let category: CompetitorCategory = "irrelevant";
-    if (isMarketplace) {
-      category = "marketplace";
-    } else if (isPublisher) {
-      category = "publisher";
-    } else if (totalScore >= 58 && breakdown.productSimilarity >= 16) {
-      category = "direct";
-    } else if (totalScore >= 35) {
-      category = "indirect";
-    } else {
-      category = "irrelevant";
-    }
-
-    // Filter out irrelevant spam/domain noise
-    if (category === "irrelevant") continue;
-
-    // Extract pricing evidence if present
-    const pricingEvidenceMatch = cand.snippets.find((s) => /\$|free trial|month|pricing|billed/i.test(s));
-
-    verifiedList.push({
-      name: cand.name,
-      domain,
-      website: cand.url,
-      description: cand.snippets[0] || `${cand.name} provides products in the ${profile.industry} category.`,
-      valueProposition: cand.titles[0] || `${cand.name} solution`,
-      products: profile.products.slice(0, 2),
-      targetSegments: profile.targetSegments,
-      strengths: [
-        `Observed in Google search for ${cand.discoveryQueries.size} commercial queries`,
-        cand.sponsoredRankings.length > 0 ? "Active in Google Sponsored Ad placements" : "Solid organic search visibility",
-      ],
-      weaknesses: [
-        "Generic positioning across broad industry queries",
-      ],
-      marketingChannels: cand.sponsoredRankings.length > 0 ? ["Google Search Ads", "Organic Search"] : ["Organic Search"],
-      contentStrategy: "Search-optimized product & comparison landing pages",
-      differentiators: [
-        `${profile.name} provides targeted specialization vs ${cand.name}'s generic search footprint.`,
-      ],
-      pricing: pricingEvidenceMatch || "Pricing not explicitly stated in SERP snippet",
-      category,
-      score: totalScore,
-      scoreBreakdown: breakdown,
-      scoringRationale: `Surfaced across ${queryOverlapCount} query intents with product similarity rating of ${breakdown.productSimilarity}/30 and audience overlap of ${breakdown.audienceOverlap}/20.`,
-      discoveryQueries: Array.from(cand.discoveryQueries),
-      organicRankings: cand.organicRankings,
-      sponsoredRankings: cand.sponsoredRankings,
-      transparencyStatus: "not_verified",
-      creatives: [],
-      evidenceSnippet: cand.snippets[0] || cand.titles[0] || "",
-      verifiedAt: new Date().toISOString(),
-    });
+  if (identified && identified.length > 0) {
+    picked = identified.filter((c) => !isPublisher(c.domain) && !IGNORED_DOMAINS.has(c.domain));
+    console.log(`[CompetitorEngine] Gemini picked ${picked.length} competitors: ${picked.map((c) => c.name).join(", ")}`);
+  } else {
+    picked = heuristicCompetitors(rawCandidates, profile);
+    console.log(`[CompetitorEngine] Heuristic fallback picked ${picked.length} competitors`);
   }
 
-  // Sort: Direct first (highest score), then Indirect, then Marketplace, then Publisher
-  verifiedList.sort((a, b) => {
-    const catWeight: Record<CompetitorCategory, number> = {
-      direct: 4,
-      indirect: 3,
-      marketplace: 2,
-      publisher: 1,
-      irrelevant: 0,
-    };
-    const catDiff = (catWeight[b.category || "indirect"] || 0) - (catWeight[a.category || "indirect"] || 0);
-    if (catDiff !== 0) return catDiff;
-    return (b.score || 0) - (a.score || 0);
-  });
+  const seenDomains = new Set<string>();
+  const categoryWeight: Record<CompetitorCategory, number> = { direct: 4, indirect: 3, marketplace: 2, publisher: 1, irrelevant: 0 };
+  const verifiedList = picked
+    .filter((c) => {
+      if (!c.domain || c.domain === userDomain || seenDomains.has(c.domain)) return false;
+      seenDomains.add(c.domain);
+      return true;
+    })
+    .map((c) => toCompetitor(c, rawCandidates, profile))
+    .sort(
+      (a, b) =>
+        (categoryWeight[b.category || "indirect"] || 0) - (categoryWeight[a.category || "indirect"] || 0) ||
+        (b.score || 0) - (a.score || 0)
+    )
+    .slice(0, 12);
 
-  console.log(`[CompetitorEngine] Categorized: ${verifiedList.filter((c) => c.category === "direct").length} direct, ${verifiedList.filter((c) => c.category === "indirect").length} indirect, ${verifiedList.filter((c) => c.category === "marketplace").length} marketplaces, ${verifiedList.filter((c) => c.category === "publisher").length} publishers`);
-
-  // ─── 4. Query Google Ads Transparency Center for Top Verified Direct Competitors ───
-  // Inspect top 4 direct / indirect competitors
-  const topForTransparency = verifiedList.filter((c) => c.category === "direct" || c.category === "indirect").slice(0, 4);
-
-  for (const comp of topForTransparency) {
-    if (!comp.domain) continue;
-    try {
-      console.log(`[CompetitorEngine] Checking Google Ads Transparency Center for ${comp.domain}...`);
-      const trans = await searchAdvertiserTransparency(comp.domain, { gl: "us" });
-      comp.transparencyStatus = trans.status;
-      if (trans.creatives && trans.creatives.length > 0) {
-        comp.creatives = trans.creatives;
+  // ─── Ads Transparency Center for the top direct competitors ───
+  const forTransparency = verifiedList.filter((c) => c.category === "direct").slice(0, 3);
+  await Promise.allSettled(
+    forTransparency.map(async (comp) => {
+      if (!comp.domain) return;
+      try {
+        const trans = await searchAdvertiserTransparency(comp.domain, { gl });
+        comp.transparencyStatus = trans.status;
+        if (trans.creatives && trans.creatives.length > 0) comp.creatives = trans.creatives;
+      } catch (err) {
+        console.warn(`[CompetitorEngine] Transparency check error for ${comp.domain}:`, err);
+        comp.transparencyStatus = "api_error";
       }
-    } catch (err) {
-      console.warn(`[CompetitorEngine] Transparency check error for ${comp.domain}:`, err);
-      comp.transparencyStatus = "api_error";
-    }
-  }
-
-  // ─── 5. Synthesize Common Market Messaging Patterns & Strategic Insights ───
-  const allAdHeadlines = collectedAds.map((a) => a.title).concat(
-    verifiedList.flatMap((c) => c.sponsoredRankings?.map((s) => s.title) || [])
+    })
   );
 
-  const messagingPatterns: Array<{ theme: string; frequency: number; examples: string[] }> = [];
+  // ─── Ad messaging themes ───
+  const allAdHeadlines = collectedAds.map((a) => a.title);
   const themeHooks = [
-    { theme: "Speed & Rapid Time-to-Value", regex: /fast|quick|minutes|instant|easy|streamline/i },
-    { theme: "All-in-One / Unified Platform", regex: /all-in-one|platform|suite|complete|hub/i },
-    { theme: "Cost Savings & Free Trials", regex: /free|save|pricing|affordable|discount|\$/i },
-    { theme: "AI Automation & Intelligence", regex: /ai|automated|intelligent|smart|copilot/i },
-    { theme: "Trust & Enterprise Scale", regex: /trusted|enterprise|secure|proven|rated/i },
+    { theme: "Speed & convenience", regex: /fast|quick|minutes|instant|easy|same.day|delivery/i },
+    { theme: "Price, deals & free trials", regex: /free|save|sale|deal|offer|discount|affordable|cheap|\$|₹|off\b/i },
+    { theme: "Quality & trust", regex: /trusted|official|rated|best|premium|guarantee|warranty|secure/i },
+    { theme: "New & latest", regex: /new|latest|20\d\d|launch|now available/i },
+    { theme: "Smart / AI features", regex: /\bai\b|smart|intelligent|automat/i },
   ];
+  const messagingPatterns = themeHooks
+    .map((th) => {
+      const matching = allAdHeadlines.filter((h) => th.regex.test(h));
+      return { theme: th.theme, frequency: matching.length, examples: matching.slice(0, 3) };
+    })
+    .filter((p) => p.frequency > 0)
+    .sort((a, b) => b.frequency - a.frequency);
 
-  for (const th of themeHooks) {
-    const matching = allAdHeadlines.filter((h) => th.regex.test(h));
-    if (matching.length > 0) {
-      messagingPatterns.push({
-        theme: th.theme,
-        frequency: matching.length,
-        examples: matching.slice(0, 3),
-      });
-    }
+  // ─── Opportunities and threats, stated only from what the searches showed ───
+  const advertisers = [...new Set(collectedAds.map((a) => adDomain(a)).filter(Boolean))];
+  const directNames = verifiedList.filter((c) => c.category === "direct").slice(0, 3).map((c) => c.name);
+  const marketplaces = verifiedList.filter((c) => c.category === "marketplace").slice(0, 3).map((c) => c.name);
+
+  const strategicOpportunities: string[] = [];
+  if (collectedPaa[0]) {
+    strategicOpportunities.push(`Buyers keep asking Google "${collectedPaa[0].question}". A clear answer on your site or socials meets them right there.`);
+  }
+  if (directNames.length > 0) {
+    strategicOpportunities.push(`Shoppers compare you with ${directNames.join(", ")}. Honest comparison content catches them while they decide.`);
   }
 
-  const strategicOpportunities: string[] = [
-    `Competitors predominantly target broad generic terms ("${messagingPatterns[0]?.theme || "all-in-one"}"). You can win by positioning around acute operational friction.`,
-    `People Also Ask questions reveal unaddressed buyer confusion around "${collectedPaa[0]?.question || "pricing and implementation"}".`,
-    `Differentiate against marketplace aggregators by offering specialized white-glove onboarding and direct support.`,
-  ];
+  const strategicThreats: string[] = [];
+  if (advertisers.length > 0) {
+    strategicThreats.push(`${advertisers.length} brands pay for Google ads on your buyers' searches, including ${advertisers.slice(0, 3).join(", ")}.`);
+  }
+  if (marketplaces.length > 0) {
+    strategicThreats.push(`Buyers compare prices on ${marketplaces.join(", ")}.`);
+  }
 
-  const strategicThreats: string[] = [
-    `Incumbents actively bidding on category commercial queries with paid ads at position #1.`,
-    `Marketplaces and review aggregators occupy top organic positions for high-intent comparison queries.`,
-  ];
+  console.log(
+    `[CompetitorEngine] Final: ${verifiedList.filter((c) => c.category === "direct").length} direct, ` +
+      `${verifiedList.filter((c) => c.category === "indirect").length} indirect, ` +
+      `${verifiedList.filter((c) => c.category === "marketplace").length} marketplaces`
+  );
 
   return {
-    verifiedCompetitors: verifiedList.slice(0, 15), // Keep top 15 most relevant
+    verifiedCompetitors: verifiedList,
     keywordAds: collectedAds,
     shoppingResults: collectedShopping,
-    peopleAlsoAsk: collectedPaa,
+    peopleAlsoAsk: collectedPaa.slice(0, 30),
     organicKeywords: collectedOrganic,
     generatedQueries: queries,
     messagingPatterns,

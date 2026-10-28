@@ -82,6 +82,14 @@ export interface CompanyIntelligence {
   attributeConfidence?: Record<string, number>;
   /** Exact quote evidence from the crawled website */
   evidenceSnippets?: Record<string, string>;
+  /** What they sell in plain shopper words, e.g. "smartphones" or "thrift clothing" */
+  category?: string;
+  /** Searches real buyers type when they shop in this category */
+  searchTerms?: string[];
+  /** Competitors the profiler is confident about, checked against search results later */
+  likelyCompetitors?: Array<{ name: string; domain?: string; type?: "direct" | "indirect" }>;
+  /** True when the business sells physical goods (turns on Google Shopping research) */
+  sellsPhysicalProducts?: boolean;
 }
 
 export type CompetitorCategory =
@@ -225,6 +233,10 @@ export interface MarketIntelligence {
     snippet?: string;
     link?: string;
     title?: string;
+    /** Loopy's plain-language answer, prepared during the analysis or on first click */
+    answer?: string;
+    /** One way the brand can use this question in its marketing */
+    tip?: string;
   }>;
   organicKeywords?: Array<{
     position: number;
@@ -342,6 +354,8 @@ export interface IntelligenceSession {
   createdAt: string;
   updatedAt: string;
   error?: string;
+  /** Logged-in owner. Undefined for analyses made before login, or anonymous ones. */
+  userId?: string;
 }
 
 // ──────────────────────────────────────────────

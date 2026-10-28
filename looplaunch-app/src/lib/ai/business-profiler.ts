@@ -77,6 +77,7 @@ function createDeterministicProfile(
   const industry = onboarding.industry || "Technology & Software";
 
   const hasPricing = /pricing|\$\d+|\/mo|\/month|free trial/i.test(crawledContent);
+  const category = (onboarding.coreOffer || industry).toLowerCase().slice(0, 60);
   const pricingAndPositioning = hasPricing
     ? "Subscription / self-serve tiers observed on website"
     : "not_disclosed";
@@ -120,6 +121,10 @@ function createDeterministicProfile(
     evidenceSnippets: {
       coreOffer: coreOffer.slice(0, 150),
     },
+    category,
+    searchTerms: [`best ${category}`, `${category} price`, `${name} alternatives`],
+    likelyCompetitors: [],
+    sellsPhysicalProducts: /retail|e-?commerce|fashion|food|apparel|clothing|store|shop/i.test(`${industry} ${coreOffer}`),
   };
 }
 
@@ -144,7 +149,7 @@ TASK: Analyze the crawled website content and client answers to extract a rigoro
 ═══ CLIENT INPUTS ═══
 Website: ${onboarding.website}
 Role: ${onboarding.role || "Not specified"}
-Selected Industry: ${onboarding.industry || "Not specified"}
+Selected Industry (picked from a short dropdown, may be loose or wrong): ${onboarding.industry || "Not specified"}
 Stage: ${onboarding.stage || "Not specified"}
 Core Offer Description: ${onboarding.coreOffer || "Not specified"}
 Target Audience: ${onboarding.audience?.join(", ") || "Not specified"}
@@ -164,7 +169,13 @@ ${crawledContent.substring(0, 9000) || "No website content crawled."}
      * DO NOT hallucinate pricing tiers or countries if not supported by the text.
 2. INCLUDE EXACT EVIDENCE QUOTES:
    - Populate "evidenceSnippets" with direct short quotes (1-2 sentences) from the crawled text confirming the core offer, value prop, or pricing.
-3. OUTPUT FORMAT:
+3. WHAT THEY REALLY SELL (this drives every Google search we run):
+   - Decide from the website evidence. The client's "Selected Industry" comes from a short dropdown and can be wrong (a phone maker might pick "Tech & SaaS"). Use the real industry in "industry".
+   - "category": the plain words a shopper types for this kind of product, 1-4 words (examples: "smartphones", "thrift clothing", "CRM software", "dog food").
+   - "searchTerms": 5 short Google searches real buyers type when they are close to buying in this category: "best ...", price questions, "... vs ..." comparisons, "buy ... online", "... near me" for local shops. Lowercase, no quotes. Never use words like "software", "platform" or "tools" unless they really sell software.
+   - "likelyCompetitors": up to 8 real companies or brands that sell the same kind of product to the same buyers, with their official website domain and "direct" or "indirect". Only include ones you are confident about, otherwise return []. Never include the business itself, news sites, review sites, or marketplaces.
+   - "sellsPhysicalProducts": true if they sell physical goods.
+4. OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this schema (no markdown backticks, no explanatory text):
 {
   "name": "Brand / Company Name",
@@ -195,7 +206,11 @@ Return ONLY a valid JSON object matching this schema (no markdown backticks, no 
   "evidenceSnippets": {
     "valueProposition": "Exact quote from website",
     "products": "Exact quote from website"
-  }
+  },
+  "category": "plain shopper words for what they sell",
+  "searchTerms": ["buyer search 1", "buyer search 2", "buyer search 3", "buyer search 4", "buyer search 5"],
+  "likelyCompetitors": [{"name": "Competitor brand", "domain": "competitor.com", "type": "direct"}],
+  "sellsPhysicalProducts": false
 }`;
 
   try {

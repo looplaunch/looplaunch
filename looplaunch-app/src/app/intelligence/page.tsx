@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import {
   ArrowUp,
   ExternalLink,
@@ -26,6 +25,9 @@ import { IntelligenceSidebar } from "@/components/intelligence/IntelligenceSideb
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { LoopyPuzzle } from "@/components/loopy/LoopyPuzzle";
 import { LoopyTip } from "@/components/loopy/LoopyTip";
+import { AccountMenu } from "@/components/auth/AccountMenu";
+import { LogoMenu } from "@/components/brand/LogoMenu";
+import { useAuthUser } from "@/lib/auth/use-auth-user";
 
 // ──────────────────────────────────────────────
 // Pipeline Stage Configuration
@@ -57,10 +59,10 @@ const STAGE_ORDER: PipelineStatus[] = [
 
 /** The first strategy is generated automatically as soon as research finishes. */
 const sevenDayPrompt = (company: string) =>
-  `Build a prioritized 7-Day execution strategy for ${company}. Focus on fast customer traction, validated positioning hooks, short-form organic content, and immediate outbound steps.`;
+  `Build a prioritized 7-Day execution strategy for ${company}. Focus on fast customer traction, positioning that fits how its buyers really shop, short-form organic content, and the quickest ways to reach those buyers. Fit every step to this kind of business.`;
 
 const fourteenDayPrompt = (company: string) =>
-  `Build a comprehensive 14-Day marketing and growth strategy for ${company}. Cover positioning differentiation, short-form video content engines, competitor teardowns, outbound loops, and conversion funnels.`;
+  `Build a comprehensive 14-Day marketing and growth strategy for ${company}. Cover positioning differentiation, short-form video content, competitor comparisons, the channels where its buyers already are, and conversion funnels. Fit every step to this kind of business.`;
 
 /** Long built-in prompts are shown as a short divider label instead of a chat bubble. */
 function autoPromptLabel(content: string): string | null {
@@ -114,6 +116,19 @@ function IntelligencePageContent() {
   const [error, setError] = useState("");
   const [latestStreamingMsgId, setLatestStreamingMsgId] = useState<string | null>(null);
   const [mindMapIndex, setMindMapIndex] = useState<number | null>(null);
+  const user = useAuthUser();
+  const claimedRef = useRef<string | null>(null);
+
+  // Logged in with an anonymous analysis open: attach it to the account once, so it shows in History.
+  useEffect(() => {
+    if (!user || !sessionId || claimedRef.current === sessionId) return;
+    claimedRef.current = sessionId;
+    fetch("/api/intelligence/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    }).catch(() => {});
+  }, [user, sessionId]);
   const autoAskedRef = useRef(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -307,33 +322,31 @@ function IntelligencePageContent() {
     <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex flex-col font-sans selection:bg-[#8B5CF6]/20 selection:text-[#F4F4F5]">
       {/* ─── Header ─── */}
       <header className="sticky top-0 z-40 h-14 bg-[#09090B]/95 backdrop-blur-md border-b border-[#27272A] px-4 sm:px-8 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="text-xs font-medium text-[#A1A1AA] hover:text-[#F4F4F5] transition-colors flex items-center gap-1.5"
-          >
-            ← Home
-          </Link>
-          <div className="w-px h-3.5 bg-[#27272A]" />
-          <div className="flex items-center gap-2">
-            <LoopyMascot size={28} />
-            <Image
-              src="/logo.png"
-              alt="Loop Launch"
-              width={96}
-              height={32}
-              className="h-5 w-auto object-contain"
-              priority
-            />
-            <span className="text-[12px] text-[#52525B]">/</span>
-            <span className="text-xs text-[#F4F4F5] font-medium bg-[#111114] border border-[#27272A] px-2 py-0.5 rounded truncate max-w-[180px]">
-              {companyName}
-            </span>
-          </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <LogoMenu
+            note={
+              user === null ? (
+                <>
+                  This analysis isn&apos;t saved to an account yet.{" "}
+                  <Link
+                    href={`/login?next=${encodeURIComponent(`/intelligence?session=${sessionId}`)}`}
+                    className="text-[#F4F4F5] underline underline-offset-2"
+                  >
+                    Log in
+                  </Link>{" "}
+                  first if you want it in your History.
+                </>
+              ) : undefined
+            }
+          />
+          <span className="text-[12px] text-[#52525B]">/</span>
+          <span className="text-xs text-[#F4F4F5] font-medium bg-[#111114] border border-[#27272A] px-2 py-0.5 rounded truncate max-w-[180px]">
+            {companyName}
+          </span>
         </div>
 
-        {/* Status indicator */}
-        <div>
+        {/* Status indicator + account */}
+        <div className="flex items-center gap-4">
           {showInitialWait || (status && status.status !== "ready") ? (
             <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#111114] border border-[#27272A] text-[11px] text-[#A1A1AA] font-medium">
               <div className="w-3 h-3 border-2 border-[#A1A1AA] border-t-transparent rounded-full animate-spin shrink-0" />
@@ -343,11 +356,12 @@ function IntelligencePageContent() {
               <span className="sm:hidden">Working...</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 text-xs text-[#A1A1AA]">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#A1A1AA]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
               <span className="text-[12px] font-medium">Active</span>
             </div>
           )}
+          <AccountMenu loginNext={`/intelligence?session=${sessionId}`} />
         </div>
       </header>
 
@@ -590,6 +604,20 @@ function IntelligencePageContent() {
                             See it as a mind map
                           </button>
 
+                          {isLatest && user === null && (
+                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FF4FB4]/30 bg-[#111114] px-4 py-3">
+                              <p className="text-[13px] text-[#D4D4D8]">
+                                Sign in to save this analysis and keep chatting from any device.
+                              </p>
+                              <Link
+                                href={`/login?next=${encodeURIComponent(`/intelligence?session=${sessionId}`)}`}
+                                className="shrink-0 px-3.5 py-2 rounded-lg bg-[#F4F4F5] text-[#09090B] text-xs font-medium hover:bg-white transition-colors"
+                              >
+                                Sign in to save
+                              </Link>
+                            </div>
+                          )}
+
                           {isLatest && (
                             <div>
                               <span className="block text-[13px] text-[#A1A1AA] font-medium mb-2">
@@ -722,10 +750,10 @@ function IntelligencePageContent() {
 
       {mindMapData && (
         <MindMapDialog
+          key={mindMapIndex ?? "closed"}
           open={Boolean(mindMapMsg)}
           onClose={() => setMindMapIndex(null)}
           data={mindMapData}
-          onAsk={(q) => handleAsk(q)}
         />
       )}
     </div>

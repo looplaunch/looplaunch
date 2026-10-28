@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/supabase-server";
 import type { OnboardingInput, GatherResponse } from "@/lib/intelligence/types";
 import {
   createSession,
@@ -29,6 +30,7 @@ import { buildBusinessProfile } from "@/lib/ai/business-profiler";
 import { runCompetitorDiscoveryEngine } from "@/lib/research/competitor-engine";
 import {
   analyzeMarket,
+  answerBuyerQuestions,
   generateDiagnosis,
 } from "@/lib/ai/gemini";
 
@@ -118,7 +120,18 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
       marketResearchContext += `Active Google Ads in Space:\n${compEngineResult.keywordAds.slice(0, 6).map((a) => `• [${a.advertiserName || a.displayedLink}] "${a.title}" - ${a.snippet}`).join("\n")}\n\n`;
     }
 
-    const marketIntel = await analyzeMarket(input, marketResearchContext);
+    // Answer the first buyer questions now (one call), so the search intel panel shows them instantly.
+    const [marketIntel, paaAnswers] = await Promise.all([
+      analyzeMarket(input, marketResearchContext),
+      answerBuyerQuestions(
+        compEngineResult.peopleAlsoAsk.slice(0, 8).map((p) => p.question),
+        companyIntel
+      ),
+    ]);
+    const answeredQuestions = compEngineResult.peopleAlsoAsk.map((p) => {
+      const a = paaAnswers.find((x) => x.question === p.question);
+      return a ? { ...p, answer: a.answer, tip: a.tip } : p;
+    });
 
     // Merge comprehensive search signals into MarketIntelligence
     const enrichedMarketIntel = {
@@ -131,7 +144,7 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
       })),
       keywordAds: compEngineResult.keywordAds,
       shoppingResults: compEngineResult.shoppingResults,
-      peopleAlsoAsk: compEngineResult.peopleAlsoAsk,
+      peopleAlsoAsk: answeredQuestions,
       organicKeywords: compEngineResult.organicKeywords.slice(0, 10).map((o) => ({
         position: o.position,
         title: o.title,
@@ -194,7 +207,8 @@ export async function POST(request: Request) {
     }
 
     // Create session and start pipeline asynchronously
-    const session = await createSession(input);
+    const user = await getCurrentUser();
+    const session = await createSession(input, user?.id);
 
     // Run pipeline in background (don't await — return immediately)
     runPipeline(session.id, input).catch((e) => {

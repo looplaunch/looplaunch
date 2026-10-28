@@ -50,13 +50,33 @@ const CATEGORY_LABEL: Record<string, string> = {
   publisher: "Publisher",
 };
 
+/** Host of a URL or of a Google "displayed link" such as "https://www.bestbuy.com › phones". */
 function domainOf(url?: string): string {
   if (!url) return "";
-  try {
-    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
-  } catch {
-    return url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
-  }
+  const host = url.trim().replace(/^https?:\/\//i, "").split(/[\s›/?#]/)[0] || "";
+  return host.toLowerCase().replace(/^www\./, "");
+}
+
+/** Ad links are often Google tracking URLs; the displayed link names the real advertiser. */
+function adDomain(ad: { link?: string; displayedLink?: string }): string {
+  const fromLink = domainOf(ad.link);
+  if (fromLink && !/google|doubleclick/.test(fromLink)) return fromLink;
+  return domainOf(ad.displayedLink) || fromLink;
+}
+
+/** Search snippets can carry markdown or page furniture; keep plain sentences. */
+function plainText(text?: string): string {
+  return (text || "")
+    .replace(/[#*_`>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Only show a price when it actually looks like one ("From $799", "₹1,299", "$12/month"). */
+function realPrice(p?: string): string | null {
+  if (!p) return null;
+  const clean = plainText(p);
+  return clean.length <= 40 && /[$₹£€]\s?\d|\d\s?(usd|inr|rs)\b/i.test(clean) ? clean : null;
 }
 
 const googleSearch = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
@@ -126,7 +146,7 @@ export function IntelligenceSidebar({
   const advertisers = useMemo(() => {
     const counts = new Map<string, number>();
     for (const ad of keywordAds) {
-      const d = domainOf(ad.displayedLink || ad.link);
+      const d = adDomain(ad);
       if (d) counts.set(d, (counts.get(d) || 0) + 1);
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
@@ -156,10 +176,16 @@ export function IntelligenceSidebar({
   const fetchAnswer = async (idx: number) => {
     const q = questions[idx];
     if (!q) return;
-    if (q.snippet) {
+    const ready = q.snippet || q.answer;
+    if (ready) {
       setAnswers((a) => ({
         ...a,
-        [idx]: { state: "done", answer: q.snippet!, source: q.link ? { title: q.title || domainOf(q.link), link: q.link } : undefined },
+        [idx]: {
+          state: "done",
+          answer: ready,
+          tip: q.tip,
+          source: q.snippet && q.link ? { title: q.title || domainOf(q.link), link: q.link } : undefined,
+        },
       }));
       return;
     }
@@ -281,7 +307,7 @@ export function IntelligenceSidebar({
                               <div className="px-3 pb-3 space-y-2.5">
                                 {(!a || a.state === "loading") && (
                                   <div className="space-y-1.5 py-1" role="status">
-                                    <p className="text-[12px] text-[#A1A1AA] mb-2">Loopy is looking this up...</p>
+                                    <p className="text-[12px] text-[#A1A1AA] mb-2">Loopy is looking this up. This can take up to 20 seconds.</p>
                                     <div className="h-2.5 rounded bg-[#27272A] animate-pulse w-full" />
                                     <div className="h-2.5 rounded bg-[#27272A] animate-pulse w-11/12" />
                                     <div className="h-2.5 rounded bg-[#27272A] animate-pulse w-2/3" />
@@ -494,7 +520,7 @@ export function IntelligenceSidebar({
                           <div className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
                             <span className="font-semibold text-[#D4D4D8]">Sponsored</span>
                             <span>·</span>
-                            <span className="truncate">{domainOf(ad.displayedLink || ad.link)}</span>
+                            <span className="truncate">{adDomain(ad)}</span>
                           </div>
                           <h4 className="text-[13.5px] font-medium text-[#93C5FD] leading-snug mt-1 group-hover:underline">
                             {ad.title}
@@ -665,13 +691,13 @@ export function IntelligenceSidebar({
                       )}
 
                       {comp.description && (
-                        <p className="text-[12px] text-[#A1A1AA] leading-relaxed line-clamp-3">{comp.description}</p>
+                        <p className="text-[12px] text-[#A1A1AA] leading-relaxed line-clamp-3">{plainText(comp.description)}</p>
                       )}
 
-                      {comp.pricing && !/not explicitly stated/i.test(comp.pricing) && (
+                      {realPrice(comp.pricing) && (
                         <p className="text-[12px] text-[#A1A1AA]">
-                          <span className="text-[#71717A]">Price: </span>
-                          <span className="text-[#F4F4F5]">{comp.pricing}</span>
+                          <span className="text-[#71717A]">Price seen: </span>
+                          <span className="text-[#F4F4F5]">{realPrice(comp.pricing)}</span>
                         </p>
                       )}
 

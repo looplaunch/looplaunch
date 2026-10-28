@@ -6,6 +6,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import {
@@ -15,6 +16,20 @@ import {
 } from "./types";
 
 const STORAGE_KEY = "looplaunch-onboarding";
+const RESET_EVENT = "looplaunch:onboarding-reset";
+
+/**
+ * Forget saved answers so the next analysis starts at question 1.
+ * A mounted onboarding flow resets right away; one that mounts later starts empty.
+ */
+export function clearOnboardingProgress() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage unavailable
+  }
+  window.dispatchEvent(new Event(RESET_EVENT));
+}
 
 interface OnboardingContextValue {
   data: OnboardingData;
@@ -29,14 +44,23 @@ interface OnboardingContextValue {
   canGoPrev: boolean;
   isComplete: boolean;
   reset: () => void;
+  /** Drop the saved answers once an analysis has launched, so coming back starts fresh. */
+  clearSaved: () => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
-export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<OnboardingData>(EMPTY_ONBOARDING);
+interface OnboardingProviderProps {
+  children: ReactNode;
+  /** Answers to start with when nothing is saved, e.g. the website from the user's profile */
+  initialData?: Partial<OnboardingData>;
+}
+
+export function OnboardingProvider({ children, initialData }: OnboardingProviderProps) {
+  const [data, setData] = useState<OnboardingData>(() => ({ ...EMPTY_ONBOARDING, ...initialData }));
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const skipPersist = useRef(false);
 
   // Hydrate from sessionStorage on mount
   useEffect(() => {
@@ -53,9 +77,20 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
+  // "Start a new analysis" from anywhere in the app
+  useEffect(() => {
+    const onReset = () => {
+      skipPersist.current = false;
+      setData({ ...EMPTY_ONBOARDING, ...initialData });
+      setCurrentStepIndex(0);
+    };
+    window.addEventListener(RESET_EVENT, onReset);
+    return () => window.removeEventListener(RESET_EVENT, onReset);
+  }, [initialData]);
+
   // Persist to sessionStorage on change
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || skipPersist.current) return;
     try {
       sessionStorage.setItem(
         STORAGE_KEY,
@@ -94,6 +129,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  const clearSaved = useCallback(() => {
+    skipPersist.current = true;
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Storage unavailable
+    }
+  }, []);
+
   const canGoNext = currentStepIndex < STEPS.length - 1;
   const canGoPrev = currentStepIndex > 0;
   const isComplete = currentStepIndex === STEPS.length - 1;
@@ -113,6 +157,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         canGoPrev,
         isComplete,
         reset,
+        clearSaved,
       }}
     >
       {children}
