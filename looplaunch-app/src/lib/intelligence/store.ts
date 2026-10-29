@@ -492,26 +492,54 @@ export async function updateStatus(
 }
 
 /**
- * Delete a session.
+ * Delete one analysis, only if `ownerId` owns it. A single conditional delete, so ownership
+ * is checked without downloading the (large) research data first.
  */
-export async function deleteSession(sessionId: string): Promise<boolean> {
-  const deletedFromMemory = getMemoryStore().delete(sessionId);
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { error } = await supabase
-        .from(SESSIONS_TABLE)
-        .delete()
-        .eq("id", sessionId);
-
-      if (error) {
-        console.warn(`[Supabase Store] Error deleting session ${sessionId}:`, error.message);
-      }
-    }
-  } catch (error) {
-    console.warn(`[Supabase Store] Error deleting session ${sessionId}:`, error);
+export async function deleteOwnedSession(
+  sessionId: string,
+  ownerId: string
+): Promise<"deleted" | "not-found" | "failed"> {
+  const memory = getMemoryStore();
+  const supabase = getSupabase();
+  if (!supabase) {
+    if (memory.get(sessionId)?.userId !== ownerId) return "not-found";
+    memory.delete(sessionId);
+    return "deleted";
   }
-  return deletedFromMemory;
+
+  const { data, error } = await supabase
+    .from(SESSIONS_TABLE)
+    .delete()
+    .eq("id", sessionId)
+    .eq("user_id", ownerId)
+    .select("id");
+  if (error) {
+    console.warn(`[Supabase Store] Error deleting session ${sessionId}:`, error.message);
+    return "failed";
+  }
+  if (!data?.length) return "not-found";
+  memory.delete(sessionId);
+  return "deleted";
+}
+
+/**
+ * Delete every analysis a user owns (when they delete their account).
+ * Returns false if the database delete failed.
+ */
+export async function deleteSessionsForUser(userId: string): Promise<boolean> {
+  const memory = getMemoryStore();
+  for (const [id, session] of memory) {
+    if (session.userId === userId) memory.delete(id);
+  }
+  const supabase = getSupabase();
+  if (!supabase) return true;
+
+  const { error } = await supabase.from(SESSIONS_TABLE).delete().eq("user_id", userId);
+  if (error) {
+    console.warn(`[Supabase Store] Error deleting sessions for user ${userId}:`, error.message);
+    return false;
+  }
+  return true;
 }
 
 /**

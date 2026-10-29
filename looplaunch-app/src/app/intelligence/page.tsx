@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -13,6 +13,7 @@ import {
   RotateCcw,
   CheckCircle2,
   Network,
+  Lock,
 } from "lucide-react";
 import type {
   StatusResponse,
@@ -26,6 +27,7 @@ import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { LoopyPuzzle } from "@/components/loopy/LoopyPuzzle";
 import { LoopyTip } from "@/components/loopy/LoopyTip";
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { LoginPrompt } from "@/components/auth/LoginPrompt";
 import { LogoMenu } from "@/components/brand/LogoMenu";
 import { useAuthUser } from "@/lib/auth/use-auth-user";
 
@@ -119,6 +121,18 @@ function IntelligencePageContent() {
   const user = useAuthUser();
   const claimedRef = useRef<string | null>(null);
 
+  // Signed-out visitors get their first strategy; after that, chatting needs a login (the
+  // ask API enforces this too). "intel" is the locked search intel sidebar.
+  const hasAnswer = messages.some((m) => m.role === "assistant");
+  const chatLocked = user === null && hasAnswer;
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginReason, setLoginReason] = useState<"chat" | "intel">("chat");
+  const askToLogIn = (reason: "chat" | "intel") => {
+    setLoginReason(reason);
+    setLoginOpen(true);
+  };
+  const closeLogin = useCallback(() => setLoginOpen(false), []);
+
   // Logged in with an anonymous analysis open: attach it to the account once, so it shows in History.
   useEffect(() => {
     if (!user || !sessionId || claimedRef.current === sessionId) return;
@@ -208,6 +222,10 @@ function IntelligencePageContent() {
 
   // ─── Send Question ───
   const handleAsk = async (explicitQuestion?: string) => {
+    if (chatLocked) {
+      askToLogIn("chat");
+      return;
+    }
     const questionText = (explicitQuestion || question).trim();
     if (!questionText || !sessionId || isAsking) return;
 
@@ -237,6 +255,14 @@ function IntelligencePageContent() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+        if (res.status === 401 && errData.loginRequired) {
+          // Signed out after the first answer: give the question back and ask them to log in.
+          setMessages((prev) => prev.filter((m) => m.id !== userMsgId));
+          setQuestion(questionText);
+          askToLogIn("chat");
+          setIsAsking(false);
+          return;
+        }
         setError(errData.error || "Failed to generate strategic response");
         setIsAsking(false);
         return;
@@ -284,7 +310,6 @@ function IntelligencePageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, messages.length]);
 
-  const hasAnswer = messages.some((m) => m.role === "assistant");
   const has14Day = messages.some((m) => m.role === "user" && autoPromptLabel(m.content) === "14-day strategy");
   // One continuous wait (and one puzzle) from research through the first strategy.
   const showInitialWait = isGathering || (isReady && !hasAnswer && (isAsking || messages.length === 0) && !error);
@@ -604,20 +629,6 @@ function IntelligencePageContent() {
                             See it as a mind map
                           </button>
 
-                          {isLatest && user === null && (
-                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FF4FB4]/30 bg-[#111114] px-4 py-3">
-                              <p className="text-[13px] text-[#D4D4D8]">
-                                Sign in to save this analysis and keep chatting from any device.
-                              </p>
-                              <Link
-                                href={`/login?next=${encodeURIComponent(`/intelligence?session=${sessionId}`)}`}
-                                className="shrink-0 px-3.5 py-2 rounded-lg bg-[#F4F4F5] text-[#09090B] text-xs font-medium hover:bg-white transition-colors"
-                              >
-                                Sign in to save
-                              </Link>
-                            </div>
-                          )}
-
                           {isLatest && (
                             <div>
                               <span className="block text-[13px] text-[#A1A1AA] font-medium mb-2">
@@ -665,15 +676,17 @@ function IntelligencePageContent() {
             )}
             </div>
 
-            {/* Right Column: Live SerpApi Search & Ads Intelligence Sidebar */}
-            <IntelligenceSidebar
-              marketIntelligence={status.marketIntelligence}
-              competitorIntelligence={status.competitorIntelligence}
-              companyName={companyName}
-              sessionId={sessionId}
-              onAsk={(q) => handleAsk(q)}
-              isAsking={isAsking}
-            />
+            {/* Right Column: Search Intel, built from stored research (no new searches) */}
+            {status.searchIntel && (
+              <IntelligenceSidebar
+                intel={status.searchIntel}
+                companyName={companyName}
+                sessionId={sessionId}
+                onAsk={(q) => handleAsk(q)}
+                isAsking={isAsking}
+                onUnlock={() => askToLogIn("intel")}
+              />
+            )}
           </div>
         )}
 
@@ -714,39 +727,72 @@ function IntelligencePageContent() {
               </div>
             )}
 
-            <div className="relative flex items-end bg-[#111114] border border-[#27272A] focus-within:border-[#3F3F46] rounded-xl transition-all shadow-sm">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={question}
-                onChange={handleTextareaInput}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAsk();
-                  }
-                }}
-                placeholder="Ask a strategic question or follow up on your execution roadmap..."
-                disabled={isAsking}
-                className="w-full bg-transparent text-[#F4F4F5] text-sm placeholder:text-[#52525B] px-4 py-3 pr-12 resize-none focus:outline-none min-h-[46px] max-h-[180px] leading-relaxed"
-              />
+            {chatLocked ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => askToLogIn("chat")}
+                  className="w-full flex items-center gap-3 bg-[#111114] border border-[#27272A] hover:border-[#3F3F46] rounded-xl pl-4 pr-2.5 py-2 text-left transition-colors cursor-pointer"
+                >
+                  <Lock className="w-4 h-4 text-[#A1A1AA] shrink-0" />
+                  <span className="flex-1 text-sm text-[#A1A1AA]">Log in to ask Loopy follow-up questions</span>
+                  <span className="shrink-0 px-3 py-1.5 rounded-lg bg-[#F4F4F5] text-[#09090B] text-xs font-medium">
+                    Log in
+                  </span>
+                </button>
+                <div className="text-[11px] text-[#71717A] mt-1.5 px-1 text-center sm:text-left">
+                  <span>Logging in also unlocks the search intel and saves this analysis to your History.</span>
+                </div>
+              </>
+            ) : (
+              <>
+              <div className="relative flex items-end bg-[#111114] border border-[#27272A] focus-within:border-[#3F3F46] rounded-xl transition-all shadow-sm">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={question}
+                  onChange={handleTextareaInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAsk();
+                    }
+                  }}
+                  placeholder="Ask a strategic question or follow up on your execution roadmap..."
+                  disabled={isAsking}
+                  className="w-full bg-transparent text-[#F4F4F5] text-sm placeholder:text-[#52525B] px-4 py-3 pr-12 resize-none focus:outline-none min-h-[46px] max-h-[180px] leading-relaxed"
+                />
 
-              <button
-                onClick={() => handleAsk()}
-                disabled={!question.trim() || isAsking}
-                className="absolute right-2.5 bottom-2 w-8 h-8 rounded-lg bg-[#F4F4F5] text-[#09090B] flex items-center justify-center hover:bg-white disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
-                title="Send message (Enter)"
-              >
-                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-              </button>
-            </div>
+                <button
+                  onClick={() => handleAsk()}
+                  disabled={!question.trim() || isAsking}
+                  className="absolute right-2.5 bottom-2 w-8 h-8 rounded-lg bg-[#F4F4F5] text-[#09090B] flex items-center justify-center hover:bg-white disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  title="Send message (Enter)"
+                >
+                  <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
 
-            <div className="text-[11px] text-[#71717A] mt-1.5 px-1 text-center sm:text-left">
-              <span>Press Enter to send · Shift + Enter for new line</span>
-            </div>
+                <div className="text-[11px] text-[#71717A] mt-1.5 px-1 text-center sm:text-left">
+                  <span>Press Enter to send · Shift + Enter for new line</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
+
+      <LoginPrompt
+        open={loginOpen}
+        onClose={closeLogin}
+        next={`/intelligence?session=${sessionId}`}
+        title={loginReason === "intel" ? "Log in to see the search intel" : "Log in to keep chatting"}
+        description={
+          loginReason === "intel"
+            ? `See what ${companyName}'s buyers ask Google, the ads running in this market, and who you're up against.`
+            : `Your 7-day strategy for ${companyName} is ready. Log in to ask Loopy follow-up questions, unlock the search intel, and save this analysis to your History.`
+        }
+      />
 
       {mindMapData && (
         <MindMapDialog

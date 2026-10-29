@@ -1,38 +1,28 @@
 /**
  * POST /api/intelligence/gather
  *
- * Main intelligence pipeline endpoint.
- * Receives onboarding data (9-question format) and orchestrates:
- * 1. Crawl company website (Crawl4AI with fetch fallback)
- * 2. Automatic Business Profiling (Industry, sub-industry, business model, audience, pricing, geography, confidence)
- * 3. Competitor Discovery Engine (8-12 search queries, SerpApi organic + ads, Tavily, 6-factor heuristic scoring, Transparency Center)
- * 4. Market Dynamics & Search Landscape (People Also Ask, keyword ads, shopping, messaging patterns)
- * 5. Strategic SWOT & Positioning Diagnosis
- * 6. Store everything in Supabase persistent store & in-memory cache
+ * Main intelligence pipeline endpoint. Receives the onboarding answers and runs:
+ * 1. Crawl the website (Crawl4AI, or the built-in fetch crawler)
+ * 2. Business profile: what they sell, to whom, and where (Gemini, from the crawled pages)
+ * 3. Search Intel research (src/lib/research/orchestrator.ts): competitors, competitor ads,
+ *    Ad Library and buyer questions within the configured search budget, reusing cached results
+ * 4. Market analysis and AI answers to the buyer questions (Gemini, from that research)
+ * 5. Strategic diagnosis (Gemini, from the same research brief)
+ * 6. Everything is stored on the session (Supabase + in-memory cache)
  *
- * Returns immediately with a sessionId (202 Accepted).
- * Pipeline runs asynchronously — poll /api/intelligence/status for progress.
+ * Returns immediately with a sessionId (202 Accepted). Poll /api/intelligence/status.
  */
 
 import { NextResponse } from "next/server";
+import { rejectIfNoAccess } from "@/lib/auth/team-guard";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
-import type { OnboardingInput, GatherResponse } from "@/lib/intelligence/types";
-import {
-  createSession,
-  updateSession,
-  updateStatus,
-} from "@/lib/intelligence/store";
-import {
-  crawlWebsite,
-  crawlResultToText,
-} from "@/lib/crawler/website-crawler";
+import type { CrawlResult, GatherResponse, MarketIntelligence, OnboardingInput } from "@/lib/intelligence/types";
+import { createSession, updateSession, updateStatus } from "@/lib/intelligence/store";
+import { crawlWebsite, crawlResultToText } from "@/lib/crawler/website-crawler";
 import { buildBusinessProfile } from "@/lib/ai/business-profiler";
-import { runCompetitorDiscoveryEngine } from "@/lib/research/competitor-engine";
-import {
-  analyzeMarket,
-  answerBuyerQuestions,
-  generateDiagnosis,
-} from "@/lib/ai/gemini";
+import { runResearch } from "@/lib/research/orchestrator";
+import { buildResearchBrief } from "@/lib/ai/research-brief";
+import { analyzeMarket, answerBuyerQuestions, generateDiagnosis } from "@/lib/ai/gemini";
 
 // ──────────────────────────────────────────────
 // Validation (9-question format)
@@ -65,9 +55,9 @@ function validateInput(body: unknown): OnboardingInput | null {
 
 async function runPipeline(sessionId: string, input: OnboardingInput) {
   try {
-    // ─── STAGE 1: Crawl Company Website ───
-    await updateStatus(sessionId, "crawling_company", "Crawling and extracting evidence from your website...");
-    let companyCrawl;
+    // ─── STAGE 1: Crawl the website ───
+    await updateStatus(sessionId, "crawling_company", "Reading your website...");
+    let companyCrawl: CrawlResult;
     try {
       companyCrawl = await crawlWebsite(input.website);
     } catch (e) {
@@ -76,105 +66,89 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     }
     const companyText = crawlResultToText(companyCrawl);
 
-    // ─── STAGE 2: Automatic Business Profiling ───
-    await updateStatus(sessionId, "analyzing_company", "Synthesizing evidence-grounded business profile...");
+    // ─── STAGE 2: Business profile ───
+    await updateStatus(sessionId, "analyzing_company", "Working out what you sell, to whom, and where...");
     const companyIntel = await buildBusinessProfile(input, companyText);
     companyIntel.rawCrawlData = companyCrawl;
     input.companyName = companyIntel.name;
+    await updateSession(sessionId, { companyIntelligence: companyIntel, onboardingInput: input });
 
-    await updateSession(sessionId, {
-      companyIntelligence: companyIntel,
-      onboardingInput: input,
-    });
+    // ─── STAGE 3: Search Intel research (budgeted, cached, ledgered) ───
+    await updateStatus(sessionId, "crawling_competitors", "Searching Google for your competitors, their ads and your buyers' questions...");
+    const research = await runResearch(companyIntel, { sessionId });
+    await updateSession(sessionId, { competitorIntelligence: research.competitors });
 
-    // ─── STAGE 3: Competitor Discovery & Search Intelligence Engine ───
-    await updateStatus(
-      sessionId,
-      "crawling_competitors",
-      "Running 8-12 search query discovery pipeline across Google Search & Ads..."
-    );
+    // ─── STAGE 4: Market analysis + AI answers to the buyer questions ───
+    await updateStatus(sessionId, "analyzing_market", "Reading the market evidence...");
+    const searchData: MarketIntelligence = {
+      industryOverview: "",
+      marketSize: "",
+      growthTrends: [],
+      keyPlayers: [],
+      emergingTrends: [],
+      customerBehaviors: [],
+      regulations: [],
+      opportunities: [],
+      threats: [],
+      keywordAds: research.ads,
+      shoppingResults: research.shopping,
+      peopleAlsoAsk: research.questions.map((q) => ({
+        id: q.id,
+        question: q.question,
+        sourceQuery: q.sourceQuery,
+        observedAt: q.observedAt,
+        snippet: q.snippet,
+        title: q.title,
+        link: q.link,
+      })),
+      organicKeywords: research.organic.map((o) => ({ position: o.position, title: o.title, link: o.link, snippet: o.snippet })),
+      generatedQueries: research.queries,
+      messagingPatterns: research.messagingPatterns,
+      strategicOpportunities: research.strategicOpportunities,
+      strategicThreats: research.strategicThreats,
+      collectedAt: research.research.dataCollectedAt || research.research.completedAt,
+      research: research.research,
+    };
+    const brief = buildResearchBrief({ company: companyIntel, competitors: research.competitors, market: searchData });
 
-    const compEngineResult = await runCompetitorDiscoveryEngine(companyIntel);
-
-    // Save verified competitors
-    await updateSession(sessionId, {
-      competitorIntelligence: compEngineResult.verifiedCompetitors,
-    });
-
-    // ─── STAGE 4: Gemini & Market Dynamics Synthesis ───
-    await updateStatus(
-      sessionId,
-      "analyzing_market",
-      "Analyzing competitive messaging patterns & buyer search intent..."
-    );
-
-    let marketResearchContext = `Company: ${companyIntel.name} in ${companyIntel.industry} (${companyIntel.subIndustry || ""})\n`;
-    marketResearchContext += `Value Proposition: ${companyIntel.valueProposition}\n`;
-    marketResearchContext += `Verified Competitors:\n${compEngineResult.verifiedCompetitors.slice(0, 5).map((c) => `• ${c.name} (${c.website}) [${c.category}]: ${c.description} - Pricing: ${c.pricing || "N/A"}`).join("\n")}\n\n`;
-
-    if (compEngineResult.peopleAlsoAsk.length > 0) {
-      marketResearchContext += `Google People Also Ask Questions:\n${compEngineResult.peopleAlsoAsk.map((p) => `• ${p.question}`).join("\n")}\n\n`;
-    }
-
-    if (compEngineResult.keywordAds.length > 0) {
-      marketResearchContext += `Active Google Ads in Space:\n${compEngineResult.keywordAds.slice(0, 6).map((a) => `• [${a.advertiserName || a.displayedLink}] "${a.title}" - ${a.snippet}`).join("\n")}\n\n`;
-    }
-
-    // Answer the first buyer questions now (one call), so the search intel panel shows them instantly.
-    const [marketIntel, paaAnswers] = await Promise.all([
-      analyzeMarket(input, marketResearchContext),
+    // Gemini answers are labelled as AI in Search Intel; Google's own answer stays in `snippet`.
+    const [marketAnalysis, answers] = await Promise.all([
+      analyzeMarket(input, brief),
       answerBuyerQuestions(
-        compEngineResult.peopleAlsoAsk.slice(0, 8).map((p) => p.question),
+        research.questions.map((q) => q.question),
         companyIntel
       ),
     ]);
-    const answeredQuestions = compEngineResult.peopleAlsoAsk.map((p) => {
-      const a = paaAnswers.find((x) => x.question === p.question);
-      return a ? { ...p, answer: a.answer, tip: a.tip } : p;
-    });
-
-    // Merge comprehensive search signals into MarketIntelligence
-    const enrichedMarketIntel = {
-      ...marketIntel,
-      googleAds: compEngineResult.keywordAds.slice(0, 8).map((a) => ({
-        title: a.title,
-        link: a.link,
-        snippet: a.snippet,
-        displayedLink: a.displayedLink,
-      })),
-      keywordAds: compEngineResult.keywordAds,
-      shoppingResults: compEngineResult.shoppingResults,
-      peopleAlsoAsk: answeredQuestions,
-      organicKeywords: compEngineResult.organicKeywords.slice(0, 10).map((o) => ({
-        position: o.position,
-        title: o.title,
-        link: o.link,
-        snippet: o.snippet,
-      })),
-      generatedQueries: compEngineResult.generatedQueries,
-      messagingPatterns: compEngineResult.messagingPatterns,
-      strategicOpportunities: compEngineResult.strategicOpportunities,
-      strategicThreats: compEngineResult.strategicThreats,
-      collectedAt: new Date().toISOString(),
+    // Only the analysis fields come from Gemini; it can't overwrite collected search data.
+    const { industryOverview, marketSize, growthTrends, keyPlayers, emergingTrends, customerBehaviors, regulations, opportunities, threats, analysisUnavailable } =
+      marketAnalysis;
+    const marketIntel: MarketIntelligence = {
+      ...searchData,
+      industryOverview,
+      marketSize,
+      growthTrends,
+      keyPlayers,
+      emergingTrends,
+      customerBehaviors,
+      regulations,
+      opportunities,
+      threats,
+      analysisUnavailable,
+      peopleAlsoAsk: (searchData.peopleAlsoAsk || []).map((q) => {
+        const a = answers.find((x) => x.question === q.question);
+        return a ? { ...q, answer: a.answer, tip: a.tip } : q;
+      }),
     };
+    await updateSession(sessionId, { marketIntelligence: marketIntel });
 
-    await updateSession(sessionId, {
-      marketIntelligence: enrichedMarketIntel,
-    });
-
-    // ─── STAGE 5: Strategic Diagnosis ───
-    await updateStatus(sessionId, "diagnosing", "Formulating competitive SWOT & positioning diagnosis...");
-    const diagnosis = await generateDiagnosis(
-      companyIntel,
-      compEngineResult.verifiedCompetitors,
-      enrichedMarketIntel,
-      input
-    );
-    await updateSession(sessionId, { diagnosis });
+    // ─── STAGE 5: Strategic diagnosis ───
+    await updateStatus(sessionId, "diagnosing", "Putting your diagnosis together...");
+    const diagnosis = await generateDiagnosis(companyIntel, research.competitors, marketIntel, input);
+    if (diagnosis) await updateSession(sessionId, { diagnosis });
 
     // ─── DONE ───
     await updateStatus(sessionId, "ready", "Intelligence gathering complete. Ready for questions.");
-    console.log(`[Pipeline] Session ${sessionId} complete with ${compEngineResult.verifiedCompetitors.length} verified competitors.`);
+    console.log(`[Pipeline] Session ${sessionId} complete: research ${research.research.status}, ${research.competitors.length} competitors.`);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error(`[Pipeline] Fatal error for session ${sessionId}:`, msg);
@@ -191,6 +165,9 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
 // ──────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  const denied = await rejectIfNoAccess();
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const input = validateInput(body);

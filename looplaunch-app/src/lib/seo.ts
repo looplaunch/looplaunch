@@ -38,6 +38,7 @@ export const siteConfig = {
   ],
   links: {
     twitter: "https://twitter.com/looplaunch",
-    contact: "contact@looplaunch.ai",
+    // Shown in the footer and the legal pages. looplaunch.ai has no mail set up, so this is on .co.
+    contact: "work@looplaunch.co",
   },
 };

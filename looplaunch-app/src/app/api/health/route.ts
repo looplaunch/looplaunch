@@ -76,14 +76,12 @@ export async function GET() {
     };
   } else {
     try {
-      const { searchGoogleIntelligence } = await import("@/lib/research/serpapi");
-      const testSearch = await searchGoogleIntelligence("marketing", { num: 1 });
-      results.serpapi = {
-        status: testSearch ? "ok" : "error",
-        message: testSearch
-          ? "SerpApi Google search intelligence is connected and active"
-          : "SerpApi request failed",
-      };
+      // The Account API is free; a real test search here would spend a credit on every health check.
+      const { serpApiAccount } = await import("@/lib/research/serpapi");
+      const account = await serpApiAccount(serpKey);
+      results.serpapi = account.ok
+        ? { status: "ok", message: `SerpApi key works (${account.searchesLeft} searches left this month)` }
+        : { status: "error", message: `SerpApi check failed: ${account.message}` };
     } catch (err) {
       results.serpapi = {
         status: "error",

@@ -90,6 +90,12 @@ export interface CompanyIntelligence {
   likelyCompetitors?: Array<{ name: string; domain?: string; type?: "direct" | "indirect" }>;
   /** True when the business sells physical goods (turns on Google Shopping research) */
   sellsPhysicalProducts?: boolean;
+  /** Who they sell to geographically, from website evidence: a city's shops vs a whole country */
+  marketScope?: "local" | "national" | "international" | "unknown";
+  /** Country they sell in, when the website shows it ("India", "United States") */
+  country?: string;
+  /** City or area for local businesses ("Austin, Texas"), when the website shows it */
+  city?: string;
 }
 
 export type CompetitorCategory =
@@ -108,21 +114,49 @@ export interface CompetitorScoreBreakdown {
   pricingPosition: number; // 0 - 10
 }
 
+/**
+ * One ad from the Google Ads Transparency Center (via SerpApi). The Center does not return
+ * the ad's words, only a rendered preview image for many text and image ads.
+ */
 export interface AdvertiserAdCreative {
+  /** Transparency Center creative ID (stable) */
   id: string;
   advertiser: string;
   advertiserId?: string;
+  /** The competitor domain we looked up */
   targetDomain: string;
   format: "text" | "image" | "video";
+  /** Rendered preview of the ad (an image URL) when Google provides one */
   image?: string;
   video?: string;
   body?: string;
-  firstShown?: string;
-  lastShown?: string;
+  /** Older records stored Unix seconds here; new ones store ISO dates in firstShownAt / lastShownAt */
+  firstShown?: string | number;
+  lastShown?: string | number;
+  firstShownAt?: string;
+  lastShownAt?: string;
+  totalDaysShown?: number;
+  /** The creative's page on adstransparency.google.com */
   detailsLink?: string;
+  /** Country code the lookup was limited to, or undefined for anywhere */
+  region?: string;
+  competitorName?: string;
+  /** True when the advertiser's name matches the competitor (not a reseller or agency) */
+  advertiserMatchesCompetitor?: boolean;
+  source?: "serpapi_google_ads_transparency_center";
+  /** When we fetched it from the provider */
+  collectedAt?: string;
 }
 
+/** Whose ad it is, relative to the business being analysed. */
+export type AdRelation = "competitor" | "own" | "other";
+
+/**
+ * A sponsored result observed on a Google search. It shows the ad ran for that search;
+ * it says nothing about budget, performance or the advertiser's full strategy.
+ */
 export interface KeywordAdResult {
+  /** Stable fingerprint of advertiser domain + headline, so repeat sightings merge */
   id: string;
   position: number;
   blockPosition?: "top" | "bottom";
@@ -133,9 +167,18 @@ export interface KeywordAdResult {
   snippet?: string;
   advertiserName?: string;
   sitelinks?: { title: string; link: string }[];
+  /** First search this ad was seen on */
   query: string;
   location: string;
   collectedAt: string;
+  advertiserDomain?: string;
+  relation?: AdRelation;
+  /** Verified competitor this ad belongs to */
+  competitorDomain?: string;
+  competitorName?: string;
+  /** Every search this same ad was seen on */
+  observations?: Array<{ query: string; position: number; blockPosition?: "top" | "bottom"; observedAt: string }>;
+  source?: "serpapi_google";
 }
 
 export interface ShoppingProduct {
@@ -156,6 +199,16 @@ export interface SearchQuerySignal {
   totalAds?: number;
 }
 
+/** One documented part of a competitor's match score. */
+export interface ScoreFactor {
+  key: "product" | "search_overlap" | "ad_overlap";
+  label: string;
+  points: number;
+  max: number;
+  /** What the points are based on */
+  basis: string;
+}
+
 export interface CompetitorIntelligence {
   name: string;
   website: string;
@@ -173,9 +226,14 @@ export interface CompetitorIntelligence {
   rawCrawlData?: CrawlResult;
   /** Category classification */
   category?: CompetitorCategory;
-  /** Heuristic score (0 to 100) */
+  /** Match score (0 to 100), a similarity score, not a probability. Missing when there isn't enough evidence. */
   score?: number;
+  /** Older analyses only */
   scoreBreakdown?: CompetitorScoreBreakdown;
+  /** How the score was built (new analyses) */
+  scoreFactors?: ScoreFactor[];
+  /** Search results that confirm this company competes */
+  evidence?: Array<{ kind: "organic" | "ad" | "article" | "local"; title: string; url?: string; domain?: string; query?: string }>;
   scoringRationale?: string;
   /** Search queries that surfaced this competitor */
   discoveryQueries?: string[];
@@ -228,8 +286,13 @@ export interface MarketIntelligence {
     snippet?: string;
     displayedLink?: string;
   }>;
+  /** Questions Google showed in "People also ask". `snippet`/`title`/`link` are Google's answer and its source. */
   peopleAlsoAsk?: Array<{
+    id?: string;
     question: string;
+    /** The search that showed this question */
+    sourceQuery?: string;
+    observedAt?: string;
     snippet?: string;
     link?: string;
     title?: string;
@@ -252,6 +315,43 @@ export interface MarketIntelligence {
   strategicOpportunities?: string[];
   strategicThreats?: string[];
   collectedAt?: string;
+  /** How the research run went: what was searched, cache use, failures and limits */
+  research?: ResearchRunInfo;
+  /** True when the AI market analysis failed (fields above are empty, not invented) */
+  analysisUnavailable?: boolean;
+}
+
+export type ResearchStatus = "complete" | "partial" | "empty" | "unavailable";
+
+/** Facts about one research run, stored with the analysis and shown in Search Intel. */
+export interface ResearchRunInfo {
+  version: 2;
+  status: ResearchStatus;
+  /** When the run finished */
+  completedAt: string;
+  /** Oldest provider data used (older than completedAt when results came from the cache) */
+  dataCollectedAt?: string;
+  market: {
+    scope: "local" | "national" | "international" | "unknown";
+    country: string;
+    /** SerpApi location the searches ran from */
+    searchLocation: string;
+    city?: string;
+    /** True when the country was a guess (website didn't say) */
+    assumed: boolean;
+  };
+  queries: Array<{
+    query: string;
+    purpose: "competitor_discovery" | "competitor_ads" | "ad_library" | "market_evidence";
+    provider: "serpapi" | "tavily";
+    fromCache: boolean;
+    ok: boolean;
+    observedAt?: string;
+  }>;
+  requests: Record<"serpapi" | "tavily", { network: number; cached: number; failed: number }>;
+  limitations: string[];
+  /** Names the AI suggested that no search result confirmed; never counted as competitors */
+  unverifiedCompetitors?: Array<{ name: string; domain?: string }>;
 }
 
 export interface TavilySearchResult {
@@ -420,9 +520,70 @@ export interface StatusResponse {
   hasDiagnosis: boolean;
   companyName?: string;
   messages?: ChatMessage[];
-  marketIntelligence?: MarketIntelligence;
-  competitorIntelligence?: CompetitorIntelligence[];
+  /** Search Intel for the sidebar, once the analysis is ready */
+  searchIntel?: SearchIntelView;
   error?: string;
+}
+
+/** The numbers on the search intel sidebar's three tabs; each equals the length of the list it names. */
+export interface SearchIntelCounts {
+  questions: number;
+  /** Competitor search ads + Ad Library records (the default Ads view) */
+  ads: number;
+  competitors: number;
+}
+
+/** One Ads Transparency Center record, ready to show. */
+export interface AdLibraryEntry {
+  id: string;
+  competitorName: string;
+  competitorDomain: string;
+  advertiser: string;
+  advertiserMatchesCompetitor?: boolean;
+  format: "text" | "image" | "video";
+  /** Real rendered preview from Google, when available */
+  previewImageUrl?: string;
+  /** The record on adstransparency.google.com */
+  detailsUrl?: string;
+  firstShownAt?: string;
+  lastShownAt?: string;
+  totalDaysShown?: number;
+  region?: string;
+}
+
+/**
+ * Everything the Search Intel sidebar shows, in one validated shape. Built on the server
+ * from stored research (src/lib/intelligence/search-intel.ts); never triggers new searches.
+ */
+export interface SearchIntelView {
+  /** "legacy" = made before research runs were recorded */
+  status: ResearchStatus | "legacy";
+  /** Signed-out visitors: lists are empty, counts are kept */
+  locked: boolean;
+  completedAt?: string;
+  /** Oldest provider data used, when results were reused from the cache */
+  dataCollectedAt?: string;
+  cachedSearches: number;
+  totalSearches: number;
+  market?: ResearchRunInfo["market"];
+  questions: Array<{
+    id: string;
+    question: string;
+    sourceQuery?: string;
+    observedAt?: string;
+    /** Google's own answer text and its source */
+    googleAnswer?: { text: string; sourceTitle?: string; sourceUrl?: string };
+    /** Loopy's AI-written answer (not Google data) */
+    aiAnswer?: { text: string; tip?: string };
+  }>;
+  ads: { competitor: KeywordAdResult[]; other: KeywordAdResult[]; own: KeywordAdResult[] };
+  adLibrary: AdLibraryEntry[];
+  competitors: CompetitorIntelligence[];
+  searches: Array<{ query: string; purpose: string; fromCache: boolean; ok: boolean }>;
+  organic: Array<{ position: number; title: string; link: string; domain: string }>;
+  shopping: ShoppingProduct[];
+  counts: SearchIntelCounts;
+  limitations: string[];
 }
 
 export interface AskResponse {

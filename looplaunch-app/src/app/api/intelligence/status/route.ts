@@ -3,14 +3,24 @@
  *
  * Returns the current pipeline status for a session.
  * Frontend polls this endpoint during the gathering phase.
+ *
+ * Once ready, it includes the Search Intel view, built from stored research only (no new
+ * searches). Signed-out visitors get the counts but not the records, so the sidebar shows
+ * it locked.
  */
 
 import { NextResponse } from "next/server";
+import { rejectIfNoAccess } from "@/lib/auth/team-guard";
 import { getSession } from "@/lib/intelligence/store";
 import { canUseSession } from "@/lib/auth/session-access";
+import { getSignedInClaims } from "@/lib/auth/supabase-server";
+import { buildSearchIntelView, validateSearchIntelView } from "@/lib/intelligence/search-intel";
 import type { StatusResponse } from "@/lib/intelligence/types";
 
 export async function GET(request: Request) {
+  const denied = await rejectIfNoAccess();
+  if (denied) return denied;
+
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get("sessionId");
 
@@ -30,6 +40,11 @@ export async function GET(request: Request) {
     );
   }
 
+  const signedIn = Boolean(await getSignedInClaims());
+  const searchIntel = session.status === "ready" ? buildSearchIntelView(session, { locked: !signedIn }) : undefined;
+  const problems = searchIntel ? validateSearchIntelView(searchIntel) : [];
+  if (problems.length) console.warn(`[Status] Search Intel view for ${session.id} has problems: ${problems.join("; ")}`);
+
   const response: StatusResponse = {
     sessionId: session.id,
     status: session.status,
@@ -41,8 +56,7 @@ export async function GET(request: Request) {
     hasDiagnosis: !!session.diagnosis,
     companyName: session.onboardingInput?.companyName || session.companyIntelligence?.name,
     messages: session.messages || [],
-    marketIntelligence: session.marketIntelligence,
-    competitorIntelligence: session.competitorIntelligence,
+    searchIntel,
     error: session.error,
   };
 

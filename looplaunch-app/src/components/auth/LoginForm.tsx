@@ -1,36 +1,48 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LoopyMascot } from "@/components/loopy/LoopyMascot";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { OtpInput } from "@/components/auth/OtpInput";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
+import { startGoogleSignIn } from "@/lib/auth/google";
 
 type Mode = "signin" | "signup";
-type Step = "form" | "code";
+/** form: log in / sign up. code: confirm a new account. forgot: ask for a reset link. sent: check your email. */
+type Step = "form" | "code" | "forgot" | "sent";
 
 interface LoginFormProps {
   /** Where to go after logging in (same-site path). */
   next: string;
-  /** Set when Google sign-in came back with an error. */
-  authFailed?: boolean;
+  /** Set when a sign-in (Google) or password reset link came back with an error. */
+  failed?: "auth" | "reset";
 }
 
 const INPUT =
   "w-full rounded-lg bg-[#09090B] border border-[#27272A] px-3.5 py-2.5 text-sm text-[#F4F4F5] placeholder:text-[#52525B] focus:outline-none focus:border-[#8B5CF6] transition-colors";
 const PRIMARY =
   "w-full rounded-lg bg-[#F4F4F5] text-[#09090B] font-medium text-sm py-2.5 hover:bg-white disabled:opacity-40 transition-colors cursor-pointer";
+const LINK = "hover:text-[#F4F4F5] cursor-pointer";
 
-export function LoginForm({ next, authFailed }: LoginFormProps) {
+const FAILED_MESSAGES = {
+  auth: "Sign-in didn't finish. Please try again.",
+  reset: "That reset link didn't work. It may have expired or been opened in another browser. Ask for a new one below.",
+};
+
+const WRONG_PASSWORD =
+  "Email or password is wrong. Signed up with Google? Use Continue with Google, or tap Forgot password to set a password.";
+
+export function LoginForm({ next, failed }: LoginFormProps) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
-  const [step, setStep] = useState<Step>("form");
+  const [step, setStep] = useState<Step>(failed === "reset" ? "forgot" : "form");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(authFailed ? "Google sign-in didn't finish. Please try again." : "");
+  const [error, setError] = useState(failed ? FAILED_MESSAGES[failed] : "");
   const [info, setInfo] = useState("");
 
   const finish = () => {
@@ -38,15 +50,19 @@ export function LoginForm({ next, authFailed }: LoginFormProps) {
     router.refresh();
   };
 
+  const goTo = (target: Step) => {
+    setStep(target);
+    setCode("");
+    setError("");
+    setInfo("");
+  };
+
   const signInWithGoogle = async () => {
     setError("");
     setBusy(true);
-    const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
-    });
-    if (error) {
-      setError(error.message);
+    const message = await startGoogleSignIn(next);
+    if (message) {
+      setError(message);
       setBusy(false);
     }
   };
@@ -67,7 +83,8 @@ export function LoginForm({ next, authFailed }: LoginFormProps) {
           setStep("code");
           setInfo(`Your email isn't confirmed yet. We sent a 6-digit code to ${email}.`);
         } else {
-          setError(error.message === "Invalid login credentials" ? "Email or password is wrong." : error.message);
+          // Accounts made with Google have no password, which looks exactly like a wrong one.
+          setError(error.message === "Invalid login credentials" ? WRONG_PASSWORD : error.message);
         }
         setBusy(false);
         return;
@@ -116,123 +133,165 @@ export function LoginForm({ next, authFailed }: LoginFormProps) {
     setInfo(error ? error.message : "New code sent. Check your inbox and spam folder.");
   };
 
+  // ─── Forgot password ───
+
+  const sendResetLink = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setError("");
+    setInfo("");
+    setBusy(true);
+    // The email's "Reset password" button goes through the callback (which logs them in)
+    // to /reset-password, where they pick the new password. Supabase doesn't say whether
+    // the email has an account, so neither do we.
+    const { error } = await createSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+    });
+    setBusy(false);
+    if (error) {
+      setError(/rate limit|seconds/i.test(error.message) ? "Please wait a minute before asking for another email." : error.message);
+      return;
+    }
+    setStep("sent");
+    if (e === undefined) setInfo("Sent again.");
+  };
+
+  const titles: Record<Step, [string, string]> = {
+    form: [
+      mode === "signin" ? "Welcome back" : "Save your analyses",
+      "Log in to keep your analyses and chat with Loopy from any device.",
+    ],
+    code: ["Check your email", "Enter the 6-digit code we emailed you."],
+    forgot: ["Reset your password", "Enter your email and we'll send you a link to reset it."],
+    sent: ["Check your email", `If ${email} has an account, we sent it a reset link. Open it in this browser to choose a new password.`],
+  };
+
   return (
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-6">
-      <div className="w-full max-w-sm bg-[#111114] border border-[#27272A] rounded-xl p-7 shadow-lg">
-        <div className="flex flex-col items-center text-center mb-6">
-          <LoopyMascot size={56} />
-          <h1 className="mt-3 text-lg font-semibold tracking-tight">
-            {step === "code" ? "Check your email" : mode === "signin" ? "Welcome back" : "Save your analyses"}
-          </h1>
-          <p className="mt-1 text-sm text-[#A1A1AA]">
-            {step === "code"
-              ? "Enter the 6-digit code we emailed you."
-              : "Log in to keep your analyses and chat with Loopy from any device."}
-          </p>
-        </div>
+    <AuthShell title={titles[step][0]} subtitle={titles[step][1]}>
+      {step === "form" && (
+        <>
+          <button
+            type="button"
+            onClick={signInWithGoogle}
+            disabled={busy}
+            className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-[#09090B] font-medium text-sm py-2.5 hover:bg-[#F4F4F5] disabled:opacity-40 transition-colors cursor-pointer"
+          >
+            <GoogleIcon />
+            Continue with Google
+          </button>
 
-        {step === "form" && (
-          <>
-            <button
-              type="button"
-              onClick={signInWithGoogle}
-              disabled={busy}
-              className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-[#09090B] font-medium text-sm py-2.5 hover:bg-[#F4F4F5] disabled:opacity-40 transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.7-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z" />
-                <path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.5 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1C3.4 21.4 7.4 24 12 24z" />
-                <path fill="#FBBC05" d="M5.4 14.4c-.2-.7-.4-1.5-.4-2.4s.1-1.6.4-2.4V6.5H1.4C.5 8.2 0 10 0 12s.5 3.8 1.4 5.5l4-3.1z" />
-                <path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.4 0 3.4 2.6 1.4 6.5l4 3.1C6.3 6.9 8.9 4.8 12 4.8z" />
-              </svg>
-              Continue with Google
-            </button>
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-[#27272A]" />
+            <span className="text-[11px] uppercase tracking-wider text-[#52525B]">or</span>
+            <div className="flex-1 h-px bg-[#27272A]" />
+          </div>
 
-            <div className="flex items-center gap-3 my-5">
-              <div className="flex-1 h-px bg-[#27272A]" />
-              <span className="text-[11px] uppercase tracking-wider text-[#52525B]">or</span>
-              <div className="flex-1 h-px bg-[#27272A]" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-lg bg-[#09090B] border border-[#27272A]">
-              {(["signin", "signup"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => {
-                    setMode(m);
-                    setError("");
-                    setInfo("");
-                  }}
-                  className={`rounded-md py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                    mode === m ? "bg-[#27272A] text-[#F4F4F5]" : "text-[#A1A1AA] hover:text-[#F4F4F5]"
-                  }`}
-                >
-                  {m === "signin" ? "Log in" : "Create account"}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={submitPassword} className="space-y-3">
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={INPUT}
-              />
-              <input
-                type="password"
-                required
-                minLength={6}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                placeholder="Password (6+ characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={INPUT}
-              />
-              <button type="submit" disabled={busy} className={PRIMARY}>
-                {mode === "signin" ? "Log in" : "Create account"}
-              </button>
-            </form>
-          </>
-        )}
-
-        {step === "code" && (
-          <form onSubmit={verifyCode} className="space-y-3">
-            <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus />
-            <button type="submit" disabled={busy || code.length !== 6} className={PRIMARY}>
-              Verify and continue
-            </button>
-            <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
-              <button type="button" onClick={resendCode} className="hover:text-[#F4F4F5] cursor-pointer">
-                Send a new code
-              </button>
+          <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-lg bg-[#09090B] border border-[#27272A]">
+            {(["signin", "signup"] as const).map((m) => (
               <button
+                key={m}
                 type="button"
                 onClick={() => {
-                  setStep("form");
-                  setCode("");
+                  setMode(m);
                   setError("");
                   setInfo("");
                 }}
-                className="hover:text-[#F4F4F5] cursor-pointer"
+                className={`rounded-md py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                  mode === m ? "bg-[#27272A] text-[#F4F4F5]" : "text-[#A1A1AA] hover:text-[#F4F4F5]"
+                }`}
               >
-                Use a different email
+                {m === "signin" ? "Log in" : "Create account"}
               </button>
-            </div>
+            ))}
+          </div>
+
+          <form onSubmit={submitPassword} className="space-y-3">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={INPUT}
+            />
+            <PasswordInput
+              required
+              minLength={6}
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              placeholder="Password (6+ characters)"
+              value={password}
+              onChange={setPassword}
+            />
+            {mode === "signin" && (
+              <div className="flex justify-end -mt-1">
+                <button type="button" onClick={() => goTo("forgot")} className={`text-xs text-[#A1A1AA] ${LINK}`}>
+                  Forgot password?
+                </button>
+              </div>
+            )}
+            <button type="submit" disabled={busy} className={PRIMARY}>
+              {mode === "signin" ? "Log in" : "Create account"}
+            </button>
           </form>
-        )}
+        </>
+      )}
 
-        {error && <p className="mt-4 text-xs text-[#F87171]">{error}</p>}
-        {info && <p className="mt-4 text-xs text-[#A1A1AA]">{info}</p>}
+      {step === "code" && (
+        <form onSubmit={verifyCode} className="space-y-3">
+          <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus />
+          <button type="submit" disabled={busy || code.length !== 6} className={PRIMARY}>
+            Verify and continue
+          </button>
+          <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
+            <button type="button" onClick={resendCode} className={LINK}>
+              Send a new code
+            </button>
+            <button type="button" onClick={() => goTo("form")} className={LINK}>
+              Use a different email
+            </button>
+          </div>
+        </form>
+      )}
 
-        <Link href="/" className="block mt-6 text-center text-xs text-[#71717A] hover:text-[#F4F4F5] transition-colors">
-          ← Back to Loop Launch
-        </Link>
-      </div>
-    </div>
+      {step === "forgot" && (
+        <form onSubmit={sendResetLink} className="space-y-3">
+          <input
+            type="email"
+            required
+            autoFocus
+            autoComplete="email"
+            placeholder="you@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={INPUT}
+          />
+          <button type="submit" disabled={busy} className={PRIMARY}>
+            {busy ? "Sending…" : "Send reset link"}
+          </button>
+          <div className="text-center text-xs text-[#A1A1AA] pt-1">
+            <button type="button" onClick={() => goTo("form")} className={LINK}>
+              Back to log in
+            </button>
+          </div>
+        </form>
+      )}
+
+      {step === "sent" && (
+        <div className="space-y-3">
+          <p className="text-xs text-[#A1A1AA] leading-relaxed text-center">Didn&apos;t get it? Check your spam folder.</p>
+          <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
+            <button type="button" onClick={() => sendResetLink()} disabled={busy} className={LINK}>
+              Send it again
+            </button>
+            <button type="button" onClick={() => goTo("form")} className={LINK}>
+              Back to log in
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-4 text-xs text-[#F87171] leading-relaxed">{error}</p>}
+      {info && <p className="mt-4 text-xs text-[#A1A1AA] leading-relaxed">{info}</p>}
+    </AuthShell>
   );
 }

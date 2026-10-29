@@ -12,11 +12,15 @@
  */
 
 import { NextResponse } from "next/server";
+import { rejectIfNoAccess } from "@/lib/auth/team-guard";
 import { isTavilyAvailable, testTavilyIntegration, searchTavily } from "@/lib/research/tavily";
 
 const DEFAULT_TEST_QUERY = "Analyze the SaaS CRM market in the United States";
 
 export async function GET() {
+  const denied = await rejectIfNoAccess();
+  if (denied) return denied;
+
   if (!isTavilyAvailable()) {
     return NextResponse.json(
       {
@@ -51,6 +55,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = await rejectIfNoAccess();
+  if (denied) return denied;
+
   if (!isTavilyAvailable()) {
     return NextResponse.json(
       {

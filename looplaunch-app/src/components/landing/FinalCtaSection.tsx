@@ -4,9 +4,15 @@ import { Mascot } from "@/components/onboarding/Mascot";
 
 interface FinalCtaSectionProps {
   onGetStarted: () => void;
+  subtitle?: string;
+  ctaLabel?: string;
 }
 
-export function FinalCtaSection({ onGetStarted }: FinalCtaSectionProps) {
+export function FinalCtaSection({
+  onGetStarted,
+  subtitle = "Get your strategic intelligence profile in under 2 minutes.",
+  ctaLabel = "Get Started",
+}: FinalCtaSectionProps) {
   return (
     <section className="relative py-32 sm:py-44 px-6 sm:px-8 border-b border-border-subtle bg-bg-primary text-text-primary">
       <div className="relative z-10 max-w-2xl mx-auto flex flex-col items-center text-center">
@@ -22,7 +28,7 @@ export function FinalCtaSection({ onGetStarted }: FinalCtaSectionProps) {
 
         {/* Supporting copy */}
         <p className="text-text-secondary text-base sm:text-lg mb-10 max-w-lg leading-relaxed">
-          Get your strategic intelligence profile in under 2 minutes.
+          {subtitle}
         </p>
 
         {/* CTA Button */}
@@ -36,7 +42,7 @@ export function FinalCtaSection({ onGetStarted }: FinalCtaSectionProps) {
             flex items-center justify-center gap-2 cursor-pointer
           "
         >
-          <span>Get Started</span>
+          <span>{ctaLabel}</span>
           <span>&rarr;</span>
         </button>
       </div>

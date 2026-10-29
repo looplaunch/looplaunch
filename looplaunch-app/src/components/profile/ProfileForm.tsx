@@ -28,11 +28,6 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<Note>(null);
 
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [pwBusy, setPwBusy] = useState(false);
-  const [pwNote, setPwNote] = useState<Note>(null);
-
   const preview = {
     initials: initialsOf(name || profile.email),
     avatarColor: color,
@@ -60,35 +55,6 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
       return;
     }
     setNote({ ok: true, text: "Saved." });
-    router.refresh();
-  };
-
-  const changePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPwNote(null);
-    if (password.length < 6) {
-      setPwNote({ ok: false, text: "Use at least 6 characters." });
-      return;
-    }
-    if (password !== confirm) {
-      setPwNote({ ok: false, text: "The two passwords don't match." });
-      return;
-    }
-    setPwBusy(true);
-    const { error } = await createSupabaseBrowserClient().auth.updateUser({ password });
-    setPwBusy(false);
-    if (error) {
-      setPwNote({ ok: false, text: error.message });
-      return;
-    }
-    setPassword("");
-    setConfirm("");
-    setPwNote({ ok: true, text: "Password changed." });
-  };
-
-  const signOut = async () => {
-    await createSupabaseBrowserClient().auth.signOut();
-    router.push("/");
     router.refresh();
   };
 
@@ -162,7 +128,6 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
               />
             </div>
           </div>
-          <p className="text-[12px] text-[#71717A] mt-4">Signed in as {profile.email}</p>
         </section>
 
         <section className={CARD}>
@@ -198,64 +163,6 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
           {note && <span className={`text-sm ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>{note.text}</span>}
         </div>
       </form>
-
-      <section className={CARD}>
-        <h2 className="text-[15px] font-semibold">Password</h2>
-        {profile.usesPassword ? (
-          <form onSubmit={changePassword} className="mt-4 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="pf-pw" className={LABEL}>
-                  New password
-                </label>
-                <input
-                  id="pf-pw"
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={INPUT}
-                />
-              </div>
-              <div>
-                <label htmlFor="pf-pw2" className={LABEL}>
-                  Type it again
-                </label>
-                <input
-                  id="pf-pw2"
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  className={INPUT}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button type="submit" disabled={pwBusy || !password} className={PRIMARY}>
-                {pwBusy ? "Changing…" : "Change password"}
-              </button>
-              {pwNote && <span className={`text-sm ${pwNote.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>{pwNote.text}</span>}
-            </div>
-          </form>
-        ) : (
-          <p className="text-[13px] text-[#A1A1AA] mt-1">You sign in with Google, so there&apos;s no password to change here.</p>
-        )}
-      </section>
-
-      <section className={`${CARD} flex items-center justify-between gap-4`}>
-        <div>
-          <h2 className="text-[15px] font-semibold">Sign out</h2>
-          <p className="text-[13px] text-[#A1A1AA] mt-0.5">Your analyses stay saved in your account.</p>
-        </div>
-        <button
-          type="button"
-          onClick={signOut}
-          className="px-4 py-2.5 rounded-lg border border-[#3F3F46] text-sm font-medium text-[#F4F4F5] hover:bg-[#17171B] transition-colors cursor-pointer"
-        >
-          Sign out
-        </button>
-      </section>
     </div>
   );
 }

@@ -97,12 +97,12 @@ export function AccountMenu({ initialProfile, loginNext }: AccountMenuProps) {
           </Link>
           <Link role="menuitem" href="/profile" onClick={() => setOpen(false)} className={ITEM}>
             <UserRound className="w-4 h-4 text-[#71717A]" />
-            Profile settings
+            Settings
           </Link>
           <div className="h-px bg-[#27272A] my-1.5" />
           <button type="button" role="menuitem" onClick={signOut} className={ITEM}>
             <LogOut className="w-4 h-4 text-[#71717A]" />
-            Sign out
+            Log out
           </button>
         </div>
       )}

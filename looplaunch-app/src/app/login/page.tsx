@@ -11,5 +11,6 @@ export default async function LoginPage({
   const params = await searchParams;
   const next = safeNextPath(params.next);
   if (await getCurrentUser()) redirect(next);
-  return <LoginForm next={next} authFailed={params.error === "auth"} />;
+  const failed = params.error === "reset" ? "reset" : params.error === "auth" ? "auth" : undefined;
+  return <LoginForm next={next} failed={failed} />;
 }

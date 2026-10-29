@@ -8,6 +8,7 @@
  */
 
 import type { CrawledPage, CrawlResult } from "../intelligence/types";
+import { assertPublicUrl, safeFetch, UnsafeUrlError } from "./url-safety";
 
 // ──────────────────────────────────────────────
 // Crawl4AI Client
@@ -83,7 +84,7 @@ async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
       metaDescription: result.metadata?.description || result.meta_description || "",
       headings: extractHeadingsFromMarkdown(rawMarkdown),
       mainContent: truncateContent(rawMarkdown),
-      links: (result.links?.internal || []).map((l: any) => (typeof l === "string" ? l : l?.href || "")).filter(Boolean),
+      links: (result.links?.internal || []).map((l: unknown) => (typeof l === "string" ? l : (l as { href?: string } | null)?.href || "")).filter(Boolean),
       crawledAt: new Date().toISOString(),
       success: true,
     };
@@ -105,13 +106,13 @@ async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
 async function crawlWithFetch(url: string): Promise<CrawledPage> {
   try {
     console.log(`[Crawler] Fetching (fallback): ${url}`);
-    const response = await fetch(url, {
+    // Checks the address and every redirect, and stops reading after 2 MB.
+    const { response, body: html } = await safeFetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; LoopLaunchBot/1.0; +https://looplaunch.co)",
         Accept: "text/html,application/xhtml+xml",
       },
-      redirect: "follow",
       signal: AbortSignal.timeout(15000), // 15s timeout
     });
 
@@ -129,7 +130,6 @@ async function crawlWithFetch(url: string): Promise<CrawledPage> {
       };
     }
 
-    const html = await response.text();
     return parseHtml(url, html);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -218,6 +218,15 @@ async function parseHtml(url: string, html: string): Promise<CrawledPage> {
  * Tries Crawl4AI first, falls back to fetch.
  */
 export async function crawlUrl(url: string): Promise<CrawledPage> {
+  // The URL comes from the user: only public internet addresses are crawled, by either crawler.
+  try {
+    await assertPublicUrl(url);
+  } catch (e) {
+    const error = e instanceof UnsafeUrlError ? e.message : "That address can't be read.";
+    console.warn(`[Crawler] Refused ${url}: ${error}`);
+    return { url, title: "", metaDescription: "", headings: [], mainContent: "", links: [], crawledAt: new Date().toISOString(), success: false, error };
+  }
+
   // Try Crawl4AI first
   const crawl4aiResult = await crawlWithCrawl4AI(url);
   if (crawl4aiResult && crawl4aiResult.success) {

@@ -56,7 +56,9 @@ export function profileOf(user: Pick<User, "email" | "user_metadata" | "app_meta
     jobTitle: str(meta.job_title),
     companyName: str(meta.company_name),
     companyWebsite: str(meta.company_website),
-    usesPassword: providers.includes("email"),
+    // Google accounts get a password when they set one here or through "Forgot password";
+    // Supabase doesn't add "email" to their providers, so we keep our own flag.
+    usesPassword: providers.includes("email") || meta.has_password === true,
     usesGoogle: providers.includes("google"),
   };
 }

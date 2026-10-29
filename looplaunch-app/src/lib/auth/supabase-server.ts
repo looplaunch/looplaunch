@@ -32,3 +32,16 @@ export async function getCurrentUser(): Promise<User | null> {
   if (error) return null;
   return data.user;
 }
+
+/**
+ * Who is signed in, from the login token, or null when signed out. getClaims() checks the
+ * token locally, so this is cheap enough for the frequently polled API routes.
+ */
+export async function getSignedInClaims(): Promise<{ userId: string; email?: string } | null> {
+  if (!hasSupabaseAuthConfig()) return null;
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims?.sub) return null;
+  return { userId: claims.sub, email: typeof claims.email === "string" ? claims.email : undefined };
+}
