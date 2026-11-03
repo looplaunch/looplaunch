@@ -7,33 +7,34 @@ export const LOOPY_SRC = "/loopy.png";
 interface LoopyMascotProps {
   size?: number;
   className?: string;
-  /** "float" bobs gently; "wave" adds a little head tilt, used beside the speech bubble. */
-  mood?: "float" | "wave" | "still";
+  /**
+   * "hover" rests and waves when pointed at. "float" bobs on its own, for while Loopy is working.
+   * "wave" loops a head tilt beside a speech bubble. "still" never moves.
+   */
+  mood?: "hover" | "float" | "wave" | "still";
 }
 
-/**
- * Loopy, the Loop Launch mascot, with a soft idle animation.
- * Respects prefers-reduced-motion.
- */
-export function LoopyMascot({ size = 64, className = "", mood = "float" }: LoopyMascotProps) {
+const LOOPS = {
+  float: { y: [0, -5, 0], rotate: [-2, 2, -2] },
+  wave: { y: [0, -6, 0], rotate: [0, -6, 4, 0] },
+};
+
+const HOVER_WAVE = { rotate: [0, -8, 6, 0], y: [0, -4, 0], transition: { duration: 0.8, ease: "easeInOut" as const } };
+
+/** Loopy, the Loop Launch mascot. Respects prefers-reduced-motion. */
+export function LoopyMascot({ size = 64, className = "", mood = "hover" }: LoopyMascotProps) {
   const reduce = useReducedMotion();
-  const animate =
-    reduce || mood === "still"
-      ? undefined
-      : mood === "wave"
-        ? { y: [0, -6, 0], rotate: [0, -6, 4, 0] }
-        : { y: [0, -5, 0], rotate: [-2, 2, -2] };
+  const loop = !reduce && (mood === "float" || mood === "wave") ? LOOPS[mood] : undefined;
 
   return (
     <motion.div
       className={`relative shrink-0 select-none ${className}`}
       style={{ width: size, height: size }}
-      animate={animate}
+      animate={loop}
       transition={{ duration: mood === "wave" ? 2.2 : 3.6, repeat: Infinity, ease: "easeInOut" }}
+      whileHover={!reduce && mood === "hover" ? HOVER_WAVE : undefined}
       aria-hidden="true"
     >
-      {/* neon glow behind Loopy */}
-      <div className="absolute inset-[12%] rounded-full bg-[#FF4FB4]/25 blur-xl" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={LOOPY_SRC}
@@ -41,7 +42,7 @@ export function LoopyMascot({ size = 64, className = "", mood = "float" }: Loopy
         width={size}
         height={size}
         draggable={false}
-        className="relative w-full h-full object-contain rounded-full"
+        className="w-full h-full object-contain rounded-full"
       />
     </motion.div>
   );

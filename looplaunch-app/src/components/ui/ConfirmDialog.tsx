@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
+import HoldButton from "@/components/reactbits/HoldButton";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -20,7 +21,11 @@ interface ConfirmDialogProps {
 
 const noopSubscribe = () => () => {};
 
-/** "Are you sure?" pop-up for destructive actions. Portalled to <body> like the other pop-ups. */
+/**
+ * "Are you sure?" pop-up for destructive actions. Portalled to <body> like the other pop-ups.
+ * The action button must be held down (React Bits HoldButton): a red fill rises while it is held
+ * and drains away if it is let go early, so a stray click can't delete anything.
+ */
 export function ConfirmDialog({
   open,
   title,
@@ -34,6 +39,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const isClient = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const [typed, setTyped] = useState("");
+  const [tapped, setTapped] = useState(false);
   const ready = !requireText || typed.trim().toUpperCase() === requireText.toUpperCase();
 
   useEffect(() => {
@@ -46,10 +52,15 @@ export function ConfirmDialog({
   if (!isClient) return null;
 
   return createPortal(
-    <AnimatePresence onExitComplete={() => setTyped("")}>
+    <AnimatePresence
+      onExitComplete={() => {
+        setTyped("");
+        setTapped(false);
+      }}
+    >
       {open && (
         <motion.div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -59,21 +70,21 @@ export function ConfirmDialog({
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
-            className="w-full max-w-sm rounded-2xl bg-[#0D0D10] border border-[#27272A] p-6 shadow-2xl"
+            className="w-full max-w-[400px] rounded-[20px] bg-[#111114] p-6"
             initial={{ y: 12, scale: 0.97 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 8, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="confirm-title" className="text-[16px] font-semibold text-[#F4F4F5]">
+            <h2 id="confirm-title" className="text-[18px] leading-snug font-semibold text-[#F4F4F5]">
               {title}
             </h2>
-            <div className="mt-2 text-[13px] text-[#A1A1AA] leading-relaxed">{description}</div>
+            <div className="mt-2 text-[14px] text-[#B4B4BC] leading-relaxed">{description}</div>
 
             {requireText && (
-              <label className="block mt-4">
-                <span className="block text-[12px] text-[#A1A1AA] mb-1.5">
+              <label className="block mt-5">
+                <span className="block text-[14px] font-medium text-[#D4D4D8] mb-2">
                   Type <span className="font-semibold text-[#F4F4F5]">{requireText}</span> to confirm
                 </span>
                 <input
@@ -81,31 +92,49 @@ export function ConfirmDialog({
                   onChange={(e) => setTyped(e.target.value)}
                   autoFocus
                   autoComplete="off"
-                  className="w-full rounded-lg bg-[#09090B] border border-[#27272A] px-3.5 py-2.5 text-sm text-[#F4F4F5] focus:outline-none focus:border-[#F87171] transition-colors"
+                  className="w-full h-10 rounded-[10px] bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] px-3.5 text-[15px] text-[#F4F4F5] outline-none focus:border-[#F87171] transition-colors"
                 />
               </label>
             )}
 
-            {error && <p className="mt-3 text-[12px] text-[#F87171]">{error}</p>}
+            {tapped && !error && (
+              <p className="mt-3 text-[13px] text-[#FCA5A5]">Keep holding the button until it fills.</p>
+            )}
 
-            <div className="mt-5 flex justify-end gap-2">
+            {error && (
+              <p role="alert" className="mt-3 text-[13px] text-[#F87171]">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={busy}
                 autoFocus={!requireText}
-                className="px-4 py-2 rounded-lg border border-[#3F3F46] text-sm font-medium text-[#F4F4F5] hover:bg-[#17171B] disabled:opacity-40 transition-colors cursor-pointer"
+                className="h-10 px-5 rounded-full bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] hover:bg-[#222228] text-[14px] font-medium text-[#F4F4F5] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={onConfirm}
+              <HoldButton
+                onHold={onConfirm}
+                onTap={() => setTapped(true)}
                 disabled={busy || !ready}
-                className="px-4 py-2 rounded-lg bg-[#DC2626] text-sm font-medium text-white hover:bg-[#B91C1C] disabled:opacity-40 transition-colors cursor-pointer"
+                holdTime={1100}
+                resetAfter={1600}
+                size="sm"
+                radius={999}
+                glow={false}
+                backgroundColor="#2A1215"
+                fillColor="#DC2626"
+                textColor="#FCA5A5"
+                fillTextColor="#FFFFFF"
+                doneLabel="Deleting…"
+                className="!h-10 !px-5 !text-[14px] font-semibold"
               >
-                {busy ? "Working…" : confirmLabel}
-              </button>
+                Hold to {confirmLabel.charAt(0).toLowerCase() + confirmLabel.slice(1)}
+              </HoldButton>
             </div>
           </motion.div>
         </motion.div>

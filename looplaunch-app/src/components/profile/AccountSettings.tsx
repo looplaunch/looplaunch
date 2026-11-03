@@ -4,17 +4,21 @@ import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { OtpInput } from "@/components/auth/OtpInput";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { SettingsSection } from "@/components/profile/SettingsSection";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  DANGER_INLINE,
+  FIELD,
+  LABEL,
+  PRIMARY_INLINE as PRIMARY,
+  SECONDARY_INLINE as SECONDARY,
+  TEXT_LINK as LINK,
+} from "@/components/ui/fields";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
+import { toast } from "@/lib/toast";
 
-const CARD = "rounded-2xl border border-[#27272A] bg-[#111114] p-5 sm:p-6";
-const INPUT =
-  "w-full rounded-lg bg-[#09090B] border border-[#27272A] px-3.5 py-2.5 text-sm text-[#F4F4F5] placeholder:text-[#52525B] focus:outline-none focus:border-[#8B5CF6] transition-colors";
-const PRIMARY =
-  "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#F4F4F5] text-[#09090B] text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors cursor-pointer";
-const SECONDARY =
-  "px-3.5 py-2 rounded-lg border border-[#3F3F46] text-[13px] font-medium text-[#F4F4F5] hover:bg-[#17171B] disabled:opacity-40 transition-colors cursor-pointer";
-const LINK = "text-[12px] text-[#A1A1AA] hover:text-[#F4F4F5] cursor-pointer";
+const INPUT = `${FIELD} pr-3.5`;
+const HINT = "text-[13px] leading-relaxed text-[#8B8B94]";
 
 type Note = { ok: boolean; text: string } | null;
 
@@ -33,11 +37,11 @@ function Message({ note }: { note: Note }) {
 
 function Row({ label, value, action, children }: { label: string; value: ReactNode; action?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="py-4 first:pt-0 last:pb-0">
+    <div className="py-5 first:pt-0 last:pb-0">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-[#D4D4D8]">{label}</p>
-          <div className="text-[13px] text-[#A1A1AA] mt-0.5 break-words">{value}</div>
+          <p className="text-[14px] font-medium text-[#F4F4F5]">{label}</p>
+          <div className="mt-1 text-[14px] leading-6 text-[#B4B4BC] break-words">{value}</div>
         </div>
         {action}
       </div>
@@ -51,10 +55,9 @@ export function AccountSettings({ email, pendingEmail, usesPassword, usesGoogle 
   const router = useRouter();
 
   return (
-    <div className="space-y-5">
-      <section className={CARD}>
-        <h2 className="text-[15px] font-semibold mb-4">Sign-in &amp; security</h2>
-        <div className="divide-y divide-[#27272A]">
+    <>
+      <SettingsSection id="settings-signin" title="Sign-in and security" description="The email you log in with, your password, and Google.">
+        <div className="divide-y divide-[#1F1F24]">
           <EmailRow email={email} pendingEmail={pendingEmail} onChanged={() => router.refresh()} />
           <PasswordRow email={email} usesPassword={usesPassword} onChanged={() => router.refresh()} />
           <Row
@@ -66,11 +69,11 @@ export function AccountSettings({ email, pendingEmail, usesPassword, usesGoogle 
             }
           />
         </div>
-      </section>
+      </SettingsSection>
 
-      <SignOutCard />
-      <DeleteAccountCard />
-    </div>
+      <SignOutSection />
+      <DeleteAccountSection />
+    </>
   );
 }
 
@@ -145,6 +148,7 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
     }
     reset("closed");
     setNote({ ok: true, text: `Your email is now ${newEmail}.` });
+    toast("Email changed", { description: `You now log in with ${newEmail}.` });
     onChanged();
   };
 
@@ -157,7 +161,7 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
         <>
           {email}
           {pendingEmail && stage === "closed" && (
-            <span className="block text-[12px] text-[#FBBF24] mt-1">
+            <span className="block text-[13px] text-[#FBBF24] mt-1">
               Waiting for you to confirm the change to {pendingEmail}. Check both inboxes.
             </span>
           )}
@@ -172,8 +176,8 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
       }
     >
       {stage === "enter" && (
-        <form onSubmit={sendCode} className="mt-4 space-y-3">
-          <label htmlFor="acc-new-email" className="block text-[12px] text-[#A1A1AA]">
+        <form onSubmit={sendCode} className="mt-5 max-w-sm">
+          <label htmlFor="acc-new-email" className={LABEL}>
             New email
           </label>
           <input
@@ -187,7 +191,7 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
             onChange={(e) => setNewEmail(e.target.value)}
             className={INPUT}
           />
-          <div className="flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-4">
             <button type="submit" disabled={busy} className={PRIMARY}>
               {busy ? "Sending…" : "Send code"}
             </button>
@@ -199,8 +203,8 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
       )}
 
       {(stage === "new-code" || stage === "current-code") && (
-        <form onSubmit={confirm} className="mt-4 space-y-3">
-          <p className="text-[13px] text-[#D4D4D8] leading-relaxed">
+        <form onSubmit={confirm} className="mt-5 space-y-4">
+          <p className="text-[14px] text-[#D4D4D8] leading-relaxed">
             {stage === "new-code" ? (
               <>Enter the 6-digit code we sent to <span className="font-medium text-[#F4F4F5]">{codeFor}</span>.</>
             ) : (
@@ -211,9 +215,9 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
             )}
           </p>
           <div className="max-w-xs">
-            <OtpInput key={stage} value={code} onChange={setCode} disabled={busy} autoFocus />
+            <OtpInput key={stage} value={code} onChange={setCode} disabled={busy} autoFocus status={note && !note.ok ? "error" : "idle"} />
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-4">
             <button type="submit" disabled={busy || code.length !== 6} className={PRIMARY}>
               {busy ? "Checking…" : "Confirm"}
             </button>
@@ -224,7 +228,7 @@ function EmailRow({ email, pendingEmail, onChanged }: { email: string; pendingEm
               Cancel
             </button>
           </div>
-          <p className="text-[12px] text-[#71717A]">Got a link instead of a code? Click it, and your email changes once it&apos;s confirmed.</p>
+          <p className={HINT}>Got a link instead of a code? Click it, and your email changes once it&apos;s confirmed.</p>
         </form>
       )}
 
@@ -297,6 +301,7 @@ function PasswordRow({ email, usesPassword, onChanged }: { email: string; usesPa
       ok: true,
       text: usesPassword ? "Password changed." : `Password set. You can now also log in with ${email} and this password.`,
     });
+    toast(usesPassword ? "Password changed" : "Password set", { description: "Use it the next time you log in." });
     onChanged();
   };
 
@@ -320,14 +325,14 @@ function PasswordRow({ email, usesPassword, onChanged }: { email: string; usesPa
       }
     >
       {open && (
-        <form onSubmit={save} className="mt-4 space-y-3 max-w-sm">
+        <form onSubmit={save} className="mt-5 space-y-4 max-w-sm">
           {needsCode ? (
-            <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus />
+            <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus status={note && !note.ok ? "error" : "idle"} />
           ) : (
             <>
               {usesPassword && (
                 <div>
-                  <label htmlFor="acc-current-pw" className="block text-[12px] text-[#A1A1AA] mb-1.5">
+                  <label htmlFor="acc-current-pw" className={LABEL}>
                     Current password
                   </label>
                   <PasswordInput
@@ -341,7 +346,7 @@ function PasswordRow({ email, usesPassword, onChanged }: { email: string; usesPa
                 </div>
               )}
               <div>
-                <label htmlFor="acc-new-pw" className="block text-[12px] text-[#A1A1AA] mb-1.5">
+                <label htmlFor="acc-new-pw" className={LABEL}>
                   New password (6+ characters)
                 </label>
                 <PasswordInput
@@ -356,7 +361,7 @@ function PasswordRow({ email, usesPassword, onChanged }: { email: string; usesPa
               </div>
             </>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               type="submit"
               disabled={busy || password.length < 6 || (needsCode && code.length !== 6)}
@@ -369,9 +374,7 @@ function PasswordRow({ email, usesPassword, onChanged }: { email: string; usesPa
             </button>
           </div>
           {usesPassword && !needsCode && (
-            <p className="text-[12px] text-[#71717A]">
-              Forgot your current password? Log out and use &ldquo;Forgot password?&rdquo; on the login page.
-            </p>
+            <p className={HINT}>Forgot your current password? Log out and use &ldquo;Forgot password?&rdquo; on the login page.</p>
           )}
         </form>
       )}
@@ -383,7 +386,7 @@ function PasswordRow({ email, usesPassword, onChanged }: { email: string; usesPa
 
 // ─── Log out ───
 
-function SignOutCard() {
+function SignOutSection() {
   const router = useRouter();
   const [busy, setBusy] = useState<"here" | "everywhere" | null>(null);
 
@@ -395,26 +398,22 @@ function SignOutCard() {
   };
 
   return (
-    <section className={`${CARD} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
-      <div>
-        <h2 className="text-[15px] font-semibold">Log out</h2>
-        <p className="text-[13px] text-[#A1A1AA] mt-0.5">Your analyses stay saved in your account.</p>
-      </div>
+    <SettingsSection id="settings-logout" title="Log out" description="Your analyses stay saved in your account.">
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => signOut("global")} disabled={busy !== null} className={SECONDARY}>
-          {busy === "everywhere" ? "Logging out…" : "Log out of all devices"}
-        </button>
         <button type="button" onClick={() => signOut("local")} disabled={busy !== null} className={SECONDARY}>
           {busy === "here" ? "Logging out…" : "Log out"}
         </button>
+        <button type="button" onClick={() => signOut("global")} disabled={busy !== null} className={SECONDARY}>
+          {busy === "everywhere" ? "Logging out…" : "Log out of all devices"}
+        </button>
       </div>
-    </section>
+    </SettingsSection>
   );
 }
 
 // ─── Delete account ───
 
-function DeleteAccountCard() {
+function DeleteAccountSection() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -442,18 +441,20 @@ function DeleteAccountCard() {
   };
 
   return (
-    <section className={`${CARD} border-[#7F1D1D]/60`}>
-      <h2 className="text-[15px] font-semibold text-[#F87171]">Delete account</h2>
-      <p className="text-[13px] text-[#A1A1AA] mt-1 leading-relaxed">
-        Permanently deletes your account, every analysis and chat in it, and your profile. This can&apos;t be undone.
-      </p>
+    <SettingsSection
+      id="settings-delete"
+      title="Delete account"
+      danger
+      description="Permanently deletes your account, every analysis and chat in it, and your profile. This can't be undone."
+    >
+      <p className="text-[14px] leading-6 text-[#B4B4BC]">You&apos;ll be asked to type DELETE before anything is removed.</p>
       <button
         type="button"
         onClick={() => {
           setError("");
           setOpen(true);
         }}
-        className="mt-4 px-4 py-2.5 rounded-lg border border-[#7F1D1D] text-sm font-medium text-[#F87171] hover:bg-[#7F1D1D]/20 transition-colors cursor-pointer"
+        className={`${DANGER_INLINE} mt-4`}
       >
         Delete my account
       </button>
@@ -469,6 +470,6 @@ function DeleteAccountCard() {
         onConfirm={remove}
         onClose={() => setOpen(false)}
       />
-    </section>
+    </SettingsSection>
   );
 }

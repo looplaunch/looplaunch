@@ -97,8 +97,9 @@ export function MarkdownContent({
 
   if (!activeContent) return null;
 
-  // Split by double newline to identify block elements
-  const blocks = activeContent.split(/\n\s*\n/);
+  // Split by double newline to identify block elements. A heading always ends its block,
+  // so text written straight under it (no blank line) isn't swallowed into the heading.
+  const blocks = activeContent.replace(/^(#{1,6}\s.*)\n(?=\S)/gm, "$1\n\n").split(/\n\s*\n/);
   const isTyping = animate && displayedLength < content.length;
 
   return (
@@ -124,7 +125,7 @@ export function MarkdownContent({
             >
               {renderInline(trimmed.replace(/^###\s+/, ""))}
               {isLastBlock && isTyping && (
-                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#B4B4BC] align-middle" />
               )}
             </h4>
           );
@@ -139,7 +140,7 @@ export function MarkdownContent({
             >
               {renderInline(trimmed.replace(/^##\s+/, ""))}
               {isLastBlock && isTyping && (
-                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#B4B4BC] align-middle" />
               )}
             </h3>
           );
@@ -154,7 +155,7 @@ export function MarkdownContent({
             >
               {renderInline(trimmed.replace(/^#\s+/, ""))}
               {isLastBlock && isTyping && (
-                <span className="inline-block w-1.5 h-4 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+                <span className="inline-block w-1.5 h-4 ml-1 bg-[#B4B4BC] align-middle" />
               )}
             </h2>
           );
@@ -168,7 +169,7 @@ export function MarkdownContent({
           return (
             <blockquote
               key={idx}
-              className="border-l-2 border-[#3F3F46] pl-3.5 py-1 text-[#A1A1AA] my-2 bg-[#111114]/40 rounded-r-md"
+              className="border-l-2 border-[#3F3F46] pl-3.5 py-1 text-[#B4B4BC] my-2 bg-[#111114]/40 rounded-r-md"
             >
               {quoteLines.map((line, li) => (
                 <p key={li}>{renderInline(line)}</p>
@@ -207,7 +208,7 @@ export function MarkdownContent({
                 const itemText = match ? match[2] : l;
                 return (
                   <li key={li} className="flex items-start gap-2.5">
-                    <span className="text-[13px] font-medium text-[#71717A] tabular-nums shrink-0 w-4 text-right">
+                    <span className="text-[13px] font-medium text-[#8B8B94] tabular-nums shrink-0 w-4 text-right">
                       {num}.
                     </span>
                     <span className="flex-1">{renderInline(itemText)}</span>
@@ -230,7 +231,7 @@ export function MarkdownContent({
                 </React.Fragment>
               ))}
               {isLastBlock && isTyping && (
-                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+                <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#B4B4BC] align-middle" />
               )}
             </p>
           );
@@ -240,7 +241,7 @@ export function MarkdownContent({
           <p key={idx} className="text-[#D4D4D8]">
             {renderInline(trimmed)}
             {isLastBlock && isTyping && (
-              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#A1A1AA] animate-pulse align-middle" />
+              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[#B4B4BC] align-middle" />
             )}
           </p>
         );

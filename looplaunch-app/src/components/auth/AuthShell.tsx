@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
@@ -8,34 +9,43 @@ interface AuthShellProps {
   children: ReactNode;
 }
 
-/** The centered card around the login and password pages. */
+/** The login and password pages: the wordmark home, then one panel with Loopy, the title and the form. */
 export function AuthShell({ title, subtitle, children }: AuthShellProps) {
   return (
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-6">
-      <div className="w-full max-w-sm bg-[#111114] border border-[#27272A] rounded-xl p-7 shadow-lg">
-        <div className="flex flex-col items-center text-center mb-6">
-          <LoopyMascot size={56} />
-          <h1 className="mt-3 text-lg font-semibold tracking-tight">{title}</h1>
-          <p className="mt-1 text-sm text-[#A1A1AA]">{subtitle}</p>
-        </div>
-
-        {children}
-
-        <p className="mt-6 text-center text-[11px] leading-relaxed text-[#52525B]">
-          By continuing you agree to our{" "}
-          <Link href="/terms" className="underline underline-offset-2 hover:text-[#A1A1AA]">
-            Terms
-          </Link>{" "}
-          and{" "}
-          <Link href="/privacy" className="underline underline-offset-2 hover:text-[#A1A1AA]">
-            Privacy Policy
+    <div className="min-h-svh bg-[#09090B] text-[#F4F4F5] flex flex-col">
+      <header className="h-14 shrink-0">
+        <div className="mx-auto max-w-[1148px] h-full px-4 sm:px-6 flex items-center justify-between gap-4">
+          <Link href="/" className="rounded-md">
+            <Image src="/logo.png" alt="Loop Launch home" width={145} height={48} className="h-8 w-auto object-contain" priority />
           </Link>
-          .
-        </p>
-        <Link href="/" className="block mt-3 text-center text-xs text-[#71717A] hover:text-[#F4F4F5] transition-colors">
-          ← Back to Loop Launch
-        </Link>
-      </div>
+          <Link href="/" className="text-[14px] text-[#B4B4BC] hover:text-white transition-colors">
+            Back to the site
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-1 flex items-start sm:items-center justify-center px-4 pt-6 pb-16 sm:py-16">
+        <div className="w-full max-w-[400px]">
+          <div className="rounded-[20px] bg-[#111114] p-6 sm:p-8">
+            <LoopyMascot size={44} />
+            <h1 className="mt-4 text-[26px] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
+            <p className="mt-2 text-[15px] leading-[1.5] text-[#B4B4BC]">{subtitle}</p>
+            <div className="mt-6">{children}</div>
+          </div>
+
+          <p className="mt-5 px-2 text-center text-[13px] leading-relaxed text-[#8B8B94]">
+            By continuing you agree to our{" "}
+            <Link href="/terms" className="text-[#B4B4BC] underline underline-offset-2 hover:text-white">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="text-[#B4B4BC] underline underline-offset-2 hover:text-white">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

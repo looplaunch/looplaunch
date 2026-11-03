@@ -1,12 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Figtree } from "next/font/google";
+import { Jost } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
 import { getSiteUrl, siteConfig } from "@/lib/seo";
+import { Toaster } from "@/components/ui/Toaster";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import "./globals.css";
 
-const figtree = Figtree({
+// One family for the whole product: landing page, app and the interface fragments on the page.
+const jost = Jost({
   subsets: ["latin"],
-  variable: "--font-figtree",
+  variable: "--font-brand",
   display: "swap",
 });
 
@@ -125,14 +128,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${figtree.variable} ${GeistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${jost.variable} ${GeistMono.variable} h-full antialiased`}>
       <head>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <GoogleAnalytics />
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

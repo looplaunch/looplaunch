@@ -1,20 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, MotionConfig } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  ArrowUp,
-  ExternalLink,
-  ChevronRight,
-  Compass,
-  AlertCircle,
-  RotateCcw,
-  CheckCircle2,
-  Network,
-  Lock,
-} from "lucide-react";
+import { Copy, ExternalLink, ChevronRight, RotateCcw, Network, Lock, X } from "lucide-react";
 import type {
   StatusResponse,
   PipelineStatus,
@@ -26,38 +16,39 @@ import { IntelligenceSidebar } from "@/components/intelligence/IntelligenceSideb
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { LoopyPuzzle } from "@/components/loopy/LoopyPuzzle";
 import { LoopyTip } from "@/components/loopy/LoopyTip";
+import LatticeLoader from "@/components/reactbits/LatticeLoader";
+import BellToggle from "@/components/reactbits/BellToggle";
+import SlingButton from "@/components/reactbits/SlingButton";
+import { ResearchProgress } from "@/components/intelligence/ResearchProgress";
+import { Tip } from "@/components/ui/Tip";
+import { toast } from "@/lib/toast";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { LoginPrompt } from "@/components/auth/LoginPrompt";
 import { LogoMenu } from "@/components/brand/LogoMenu";
+import { PRIMARY_INLINE, SECONDARY_INLINE } from "@/components/ui/fields";
+import { possessive } from "@/lib/intelligence/summary";
 import { useAuthUser } from "@/lib/auth/use-auth-user";
 
 // ──────────────────────────────────────────────
 // Pipeline Stage Configuration
 // ──────────────────────────────────────────────
 
+/** Short words for the header while research runs. The wait screen shows the server's own statusMessage. */
 const STAGE_LABELS: Record<PipelineStatus, string> = {
-  idle: "Initializing intelligence engine...",
-  crawling_company: "Deep crawling company website & public assets",
-  crawling_competitors: "Investigating competitive landscape",
-  researching_market: "Synthesizing market category dynamics",
-  analyzing_company: "Extracting core capabilities & positioning",
-  analyzing_competitors: "Mapping competitive vulnerabilities & moats",
-  analyzing_market: "Evaluating addressable demand & whitespace",
-  diagnosing: "Synthesizing executive strategic diagnosis",
-  ready: "Intelligence Active",
-  error: "Analysis Interrupted",
+  idle: "Getting started",
+  crawling_company: "Reading your website",
+  crawling_competitors: "Searching Google",
+  researching_market: "Searching Google",
+  analyzing_company: "Profiling the business",
+  analyzing_competitors: "Comparing competitors",
+  analyzing_market: "Reading the market",
+  diagnosing: "Writing the diagnosis",
+  ready: "Strategy ready",
+  error: "Research stopped",
 };
 
-const STAGE_ORDER: PipelineStatus[] = [
-  "crawling_company",
-  "crawling_competitors",
-  "researching_market",
-  "analyzing_company",
-  "analyzing_competitors",
-  "analyzing_market",
-  "diagnosing",
-  "ready",
-];
+/** How a new message arrives in the conversation. */
+const ARRIVE = { duration: 0.32, ease: [0.22, 1, 0.36, 1] } as const;
 
 /** The first strategy is generated automatically as soon as research finishes. */
 const sevenDayPrompt = (company: string) =>
@@ -113,6 +104,8 @@ function IntelligencePageContent() {
 
   // Conversational state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Messages already saved when the page opened; only the ones after them animate in.
+  const [baseCount, setBaseCount] = useState<number | null>(null);
   const [question, setQuestion] = useState("");
   const [isAsking, setIsAsking] = useState(false);
   const [error, setError] = useState("");
@@ -159,7 +152,7 @@ function IntelligencePageContent() {
         const res = await fetch(`/api/intelligence/status?sessionId=${sessionId}`);
         if (!res.ok) {
           if (isMounted) {
-            setError("Session not found or expired. Please initialize a new session.");
+            setError("We couldn't find this analysis. It may have been deleted, or the link may be wrong.");
             setIsGathering(false);
           }
           return;
@@ -174,6 +167,7 @@ function IntelligencePageContent() {
 
         // Hydrate conversation messages from persistent session store
         if (data.messages && data.messages.length > 0) {
+          setBaseCount((b) => b ?? data.messages!.length);
           setMessages((prev) => {
             if (prev.length === 0 || data.messages!.length >= prev.length) {
               return data.messages!;
@@ -185,7 +179,7 @@ function IntelligencePageContent() {
         if (data.status === "ready") {
           setIsGathering(false);
         } else if (data.status === "error") {
-          setError(data.error || "An error occurred during intelligence synthesis.");
+          setError(data.error || "The research stopped before it finished.");
           setIsGathering(false);
         }
       } catch {
@@ -209,7 +203,7 @@ function IntelligencePageContent() {
 
   // ─── Auto-scroll to bottom of conversation ───
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isAsking]);
 
   // ─── Auto-resize textarea ───
@@ -263,7 +257,7 @@ function IntelligencePageContent() {
           setIsAsking(false);
           return;
         }
-        setError(errData.error || "Failed to generate strategic response");
+        setError(errData.error || "Loopy couldn't answer that. Please try again.");
         setIsAsking(false);
         return;
       }
@@ -294,7 +288,7 @@ function IntelligencePageContent() {
         setMessages((prev) => [...prev, assistantMsg]);
       }
     } catch {
-      setError("Network error. Please verify your connection and try again.");
+      setError("Couldn't reach Loop Launch. Check your connection and try again.");
     } finally {
       setIsAsking(false);
       setTimeout(() => inputRef.current?.focus(), 150);
@@ -315,38 +309,80 @@ function IntelligencePageContent() {
   const showInitialWait = isGathering || (isReady && !hasAnswer && (isAsking || messages.length === 0) && !error);
   const showConversation = isReady && !showInitialWait;
 
+  // "Notify me when it's ready": a browser notification once the strategy lands, if the tab is in the background.
+  const [notify, setNotify] = useState(false);
+  const wasWaitingRef = useRef(showInitialWait);
+  useEffect(() => {
+    const wasWaiting = wasWaitingRef.current;
+    wasWaitingRef.current = showInitialWait;
+    if (!wasWaiting || showInitialWait || !hasAnswer) return;
+    if (notify && document.visibilityState === "hidden" && "Notification" in window && Notification.permission === "granted") {
+      new Notification("Your Loop Launch plan is ready", { body: `Loopy has written the 7-day strategy for ${companyName}.`, icon: "/icon.png" });
+    }
+    if (notify) toast("Your plan is ready", { description: `The 7-day strategy for ${companyName} is below.` });
+  }, [showInitialWait, hasAnswer, notify, companyName]);
+
+  const toggleNotify = async (on: boolean) => {
+    if (!on) {
+      setNotify(false);
+      return;
+    }
+    if (!("Notification" in window)) {
+      setNotify(true);
+      toast("We'll tell you here", { description: "This browser can't show notifications, so watch for a message on this page.", tone: "info" });
+      return;
+    }
+    const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+    if (permission === "denied") {
+      setNotify(false);
+      toast("Notifications are blocked", { description: "Allow them for this site in your browser settings, then try again.", tone: "error" });
+      return;
+    }
+    setNotify(true);
+    toast("We'll notify you", { description: "You can switch tabs; a notification arrives when the plan is written.", tone: "info" });
+  };
+
+  const copyAnswer = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast("Answer copied", { description: "Paste it into a doc or a message; headings and lists come with it." });
+    } catch {
+      toast("Couldn't copy", { description: "Your browser blocked the clipboard. Select the text and copy it instead.", tone: "error" });
+    }
+  };
+
   const mindMapMsg = mindMapIndex !== null ? messages[mindMapIndex] : undefined;
   const mindMapData = mindMapMsg ? parseMindMap(mindMapMsg.content, `${companyName} plan`) : null;
 
   // ─── No Session ID Fallback ───
   if (!sessionId) {
     return (
-      <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-[#111114] border border-[#27272A] rounded-xl p-8 text-center shadow-lg">
-          <div className="w-10 h-10 rounded-lg bg-[#17171B] border border-[#27272A] flex items-center justify-center mx-auto mb-4 text-[#A1A1AA]">
-            <Compass className="w-5 h-5" />
-          </div>
-          <h2 className="text-lg font-semibold text-[#F4F4F5] mb-2 tracking-tight">
-            No Active Session
-          </h2>
-          <p className="text-sm text-[#A1A1AA] mb-6 leading-relaxed">
-            Please initialize an intelligence analysis from the home workspace or provide a valid session ID.
+      <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-4">
+        <div className="w-full max-w-[400px] rounded-[20px] bg-[#111114] p-6 sm:p-8">
+          <LoopyMascot size={44} />
+          <h1 className="mt-4 text-[22px] leading-tight font-semibold tracking-[-0.01em]">No analysis open</h1>
+          <p className="mt-2 text-[15px] leading-[1.5] text-[#B4B4BC]">
+            This link doesn&apos;t point to an analysis. Open one from History, or start a new one.
           </p>
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#F4F4F5] text-[#09090B] font-medium text-xs hover:bg-white transition-colors"
-          >
-            ← Return to Home
-          </Link>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Link href="/new" className={PRIMARY_INLINE}>
+              Start an analysis
+            </Link>
+            <Link href="/history" className={SECONDARY_INLINE}>
+              Open History
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex flex-col font-sans selection:bg-[#8B5CF6]/20 selection:text-[#F4F4F5]">
       {/* ─── Header ─── */}
-      <header className="sticky top-0 z-40 h-14 bg-[#09090B]/95 backdrop-blur-md border-b border-[#27272A] px-4 sm:px-8 flex items-center justify-between">
+      <header className="sticky top-0 z-40 h-14 bg-[#09090B] border-b border-[#1C1C21]">
+        <div className="h-full mx-auto max-w-[1148px] px-4 sm:px-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <LogoMenu
             note={
@@ -364,95 +400,80 @@ function IntelligencePageContent() {
               ) : undefined
             }
           />
-          <span className="text-[12px] text-[#52525B]">/</span>
-          <span className="text-xs text-[#F4F4F5] font-medium bg-[#111114] border border-[#27272A] px-2 py-0.5 rounded truncate max-w-[180px]">
-            {companyName}
+          <span className="text-[14px] text-[#3F3F48]" aria-hidden="true">
+            /
           </span>
+          <span className="text-[14px] font-medium text-[#F4F4F5] truncate max-w-[200px] sm:max-w-[320px]">{companyName}</span>
         </div>
 
-        {/* Status indicator + account */}
+        {/* While anything is running, say what; when it's done the header stays quiet */}
         <div className="flex items-center gap-4">
-          {showInitialWait || (status && status.status !== "ready") ? (
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#111114] border border-[#27272A] text-[11px] text-[#A1A1AA] font-medium">
-              <div className="w-3 h-3 border-2 border-[#A1A1AA] border-t-transparent rounded-full animate-spin shrink-0" />
+          {(showInitialWait || (status && status.status !== "ready" && status.status !== "error")) && (
+            <div className="flex items-center gap-2 text-[13px] text-[#B4B4BC]">
+              <span className="w-3.5 h-3.5 border-2 border-[#B4B4BC] border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
               <span className="hidden sm:inline">
-                {isReady ? "Writing your 7-day strategy" : status ? STAGE_LABELS[status.status] : "Analyzing..."}
+                {isReady ? "Writing your 7-day strategy" : status ? STAGE_LABELS[status.status] : "Getting started"}
               </span>
-              <span className="sm:hidden">Working...</span>
-            </div>
-          ) : (
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#A1A1AA]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-              <span className="text-[12px] font-medium">Active</span>
+              <span className="sm:hidden">Working</span>
             </div>
           )}
           <AccountMenu loginNext={`/intelligence?session=${sessionId}`} />
         </div>
+        </div>
       </header>
 
       {/* ─── Main Content Container ─── */}
-      <main className="flex-1 flex flex-col w-full max-w-6xl mx-auto px-4 sm:px-6">
-        {/* ─── Pipeline Gathering State ─── */}
+      <main className="flex-1 flex flex-col w-full max-w-[1148px] mx-auto px-4 sm:px-6">
+        {/* ─── Pipeline Gathering State ─── (no exit animation: a fading wait screen would throw off the scroll to the answer) */}
         <AnimatePresence>
           {showInitialWait && (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="pt-16 pb-20 flex flex-col items-center justify-center text-center my-auto"
+              className="pt-12 sm:pt-16 pb-20 flex flex-col items-center text-center my-auto"
             >
-              <h2 className="text-xl font-semibold text-[#F4F4F5] mb-2 tracking-tight">
-                Synthesizing Company Intelligence
-              </h2>
-              <p className="text-xs sm:text-sm text-[#A1A1AA] mb-6 max-w-md leading-relaxed">
-                Analyzing public web footprints, competitive positioning, and market dynamics for {companyName}.
+              <h1 className="text-[26px] sm:text-[30px] leading-tight font-semibold tracking-[-0.02em] [text-wrap:balance]">
+                {isReady ? "Writing your 7-day strategy" : `Researching ${companyName}`}
+              </h1>
+              <p className="mt-2 text-[16px] leading-6 text-[#B4B4BC] max-w-[52ch]">
+                {isReady
+                  ? `The research on ${companyName} is done. Loopy is turning it into a plan you can start this week.`
+                  : "Loop Launch reads your website, then searches Google for your competitors, their ads and your buyers' questions. It takes a few minutes."}
               </p>
 
               {/* Loopy puzzle to play while the pipeline runs */}
               <LoopyPuzzle
-                className="max-w-2xl mb-8"
+                className="max-w-2xl mt-8 mb-8"
                 messages={[
-                  isReady
-                    ? "Writing your 7-day strategy..."
-                    : status
-                      ? STAGE_LABELS[status.status]
-                      : "Warming up the intelligence engine...",
-                  `Loopy is studying ${companyName}...`,
+                  isReady ? "Writing your 7-day strategy…" : status?.statusMessage || "Getting started…",
+                  `Loopy is studying ${companyName}…`,
                 ]}
               />
 
-              {/* Progress Stage List */}
-              <div className="w-full max-w-md bg-[#111114] border border-[#27272A] rounded-xl p-3.5 space-y-1.5 text-left">
-                {STAGE_ORDER.map((stage) => {
-                  const currentIdx = status ? STAGE_ORDER.indexOf(status.status) : -1;
-                  const stageIdx = STAGE_ORDER.indexOf(stage);
-                  const isComplete = currentIdx > stageIdx || (stage === "ready" && hasAnswer);
-                  const isCurrent = status?.status === stage;
-
-                  return (
-                    <div
-                      key={stage}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs transition-colors ${
-                        isCurrent
-                          ? "bg-[#17171B] text-[#F4F4F5] font-medium border border-[#27272A]"
-                          : isComplete
-                          ? "text-[#A1A1AA]"
-                          : "text-[#52525B]"
-                      }`}
-                    >
-                      {isComplete ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
-                      ) : isCurrent ? (
-                        <div className="w-3 h-3 border-2 border-[#F4F4F5] border-t-transparent rounded-full animate-spin shrink-0" />
-                      ) : (
-                        <div className="w-3 h-3 rounded-full border border-[#3F3F46] shrink-0" />
-                      )}
-                      <span className="flex-1 truncate">
-                        {stage === "ready" ? "Writing your 7-day strategy" : STAGE_LABELS[stage]}
-                      </span>
-                    </div>
-                  );
-                })}
+              {/* The same four stages the dashboard and History show, with the server's own line for the step it's on */}
+              <div className="w-full max-w-xl rounded-[20px] bg-[#111114] p-5 text-left">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="text-[14px] text-[#F4F4F5] min-w-0 flex-1" aria-live="polite">
+                    {isReady ? "Research done. Writing your 7-day strategy…" : status?.statusMessage || "Getting started…"}
+                  </p>
+                  {/* React Bits BellToggle: rings, then unfurls into "Notifying you" */}
+                  <BellToggle
+                    offLabel="Notify me"
+                    onLabel="Notifying you"
+                    label="Notify me when the plan is ready"
+                    pressed={notify}
+                    onChange={toggleNotify}
+                    size="sm"
+                    color="#D4D4D8"
+                    background="#1C1C21"
+                    onColor="#FFFFFF"
+                    onBackground="#7C3AED"
+                    radius={999}
+                  />
+                </div>
+                <div className="mt-4">
+                  <ResearchProgress status={status?.status} writing={isReady} companyName={companyName} />
+                </div>
               </div>
             </motion.div>
           )}
@@ -466,20 +487,15 @@ function IntelligencePageContent() {
               /* ─── First strategy failed: let the user retry ─── */
               <div className="pt-16 pb-32 flex flex-col items-center text-center max-w-md mx-auto w-full">
                 <LoopyMascot size={72} className="mb-4" />
-                <h1 className="text-xl font-semibold text-[#F4F4F5] mb-2">
+                <h1 className="text-[22px] leading-tight font-semibold text-[#F4F4F5] mb-2">
                   Your research on {companyName} is ready
                 </h1>
-                <p className="text-sm text-[#A1A1AA] mb-6 leading-relaxed">
+                <p className="text-[15px] text-[#B4B4BC] mb-6 leading-relaxed">
                   The 7-day strategy didn&apos;t come through. Try again, or ask your own question below.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => handleAsk(sevenDayPrompt(companyName))}
-                  disabled={isAsking}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#F4F4F5] text-[#09090B] text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors cursor-pointer"
-                >
+                <button type="button" onClick={() => handleAsk(sevenDayPrompt(companyName))} disabled={isAsking} className={PRIMARY_INLINE}>
                   Write my 7-day strategy
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             ) : (
@@ -490,25 +506,41 @@ function IntelligencePageContent() {
                   const isUser = msg.role === "user";
 
                   const autoLabel = isUser ? autoPromptLabel(msg.content) : null;
+                  // Keyed by position: the list only grows, and a question's id changes once the server saves it.
+                  const animateIn = baseCount === null || index >= baseCount;
                   if (autoLabel) {
                     return (
-                      <div key={msg.id || index} className="flex items-center gap-3 pt-2 text-xs text-[#71717A]">
-                        <div className="flex-1 h-px bg-[#27272A]" />
-                        <span>Your {autoLabel} for {companyName}</span>
-                        <div className="flex-1 h-px bg-[#27272A]" />
-                      </div>
+                      <motion.div
+                        key={index}
+                        initial={animateIn ? { opacity: 0 } : false}
+                        animate={{ opacity: 1 }}
+                        transition={ARRIVE}
+                        className="flex items-center gap-3 pt-2 text-[13px] text-[#8B8B94]"
+                      >
+                        <div className="flex-1 h-px bg-[#1F1F24]" aria-hidden="true" />
+                        <span>
+                          Your {autoLabel} for {companyName}
+                        </span>
+                        <div className="flex-1 h-px bg-[#1F1F24]" aria-hidden="true" />
+                      </motion.div>
                     );
                   }
 
                   if (isUser) {
                     return (
-                      <div key={msg.id || index} className="flex justify-end pt-2">
-                        <div className="bg-[#17171B] text-[#F4F4F5] border border-[#27272A] rounded-xl rounded-tr-xs px-4 py-2.5 max-w-[85%] sm:max-w-[78%]">
-                          <p className="text-[14px] leading-relaxed font-normal whitespace-pre-wrap">
+                      <motion.div
+                        key={index}
+                        initial={animateIn ? { opacity: 0, y: 10 } : false}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={ARRIVE}
+                        className="flex justify-end pt-2"
+                      >
+                        <div className="bg-[#1C1C21] text-[#F4F4F5] rounded-2xl rounded-tr-md px-4 py-2.5 max-w-[85%] sm:max-w-[78%]">
+                          <p className="text-[15px] leading-relaxed font-normal whitespace-pre-wrap">
                             {msg.content}
                           </p>
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   }
 
@@ -516,26 +548,39 @@ function IntelligencePageContent() {
                   const isLatest = index === lastAssistantIndex;
 
                   return (
-                    <div
-                      key={msg.id || index}
-                      className="pt-2 pb-6 border-b border-[#27272A]/70 last:border-b-0 space-y-3"
+                    <motion.div
+                      key={index}
+                      initial={animateIn ? { opacity: 0, y: 12 } : false}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={ARRIVE}
+                      className="pt-2 pb-6 border-b border-[#1C1C21] last:border-b-0 space-y-3"
                     >
                       {/* Advisor badge & timestamp */}
-                      <div className="flex items-center justify-between text-xs text-[#A1A1AA]">
+                      <div className="flex items-center justify-between text-[12px] text-[#B4B4BC]">
                         <div className="flex items-center gap-2">
                           <LoopyMascot size={22} mood="still" />
-                          <span className="font-semibold text-[#F4F4F5] text-[13px]">
-                            Loopy
-                          </span>
+                          <span className="font-semibold text-[#F4F4F5] text-[14px]">Loopy</span>
                         </div>
-                        {msg.timestamp && (
-                          <span className="text-xs text-[#71717A] tabular-nums">
-                            {new Date(msg.timestamp).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {msg.timestamp && (
+                            <span className="text-[12px] text-[#8B8B94] tabular-nums mr-1">
+                              {new Date(msg.timestamp).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
+                          <Tip label="Copy answer">
+                            <button
+                              type="button"
+                              onClick={() => copyAnswer(msg.content)}
+                              aria-label="Copy answer"
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-[#8B8B94] hover:text-[#F4F4F5] hover:bg-[#1C1C21] active:scale-90 transition cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                          </Tip>
+                        </div>
                       </div>
 
                       {/* Main Markdown Content */}
@@ -550,41 +595,34 @@ function IntelligencePageContent() {
 
                         {/* Supporting Evidence */}
                         {msg.evidence && msg.evidence.length > 0 && (
-                          <div className="mt-4 pt-3.5 border-t border-[#27272A] space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[13px] text-[#A1A1AA] font-medium">
-                                What this is based on
-                              </span>
+                          <div className="mt-5 pt-4 border-t border-[#1F1F24] space-y-2.5">
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                              <span className="text-[14px] text-[#D4D4D8] font-medium">What this is based on</span>
                               {msg.researchStatus === "success" && (
-                                <span className="text-xs text-[#71717A]">Checked against live web research</span>
+                                <span className="text-[12px] text-[#8B8B94]">Checked against live web research</span>
                               )}
                             </div>
 
-                            <div className="space-y-1.5">
+                            <div className="space-y-2">
                               {msg.evidence.map((ev, ei) => (
-                                <div
-                                  key={ei}
-                                  className="bg-[#111114] border border-[#27272A] rounded-lg p-3 text-xs space-y-1"
-                                >
-                                  <p className="text-[#D4D4D8] leading-relaxed">
-                                    {ev.insight}
-                                  </p>
+                                <div key={ei} className="bg-[#111114] rounded-[14px] px-4 py-3 text-[13px] space-y-1">
+                                  <p className="text-[#D4D4D8] leading-relaxed">{ev.insight}</p>
                                   {ev.url ? (
-                                    <div className="pt-0.5 flex items-center gap-1 text-xs text-[#71717A]">
+                                    <div className="flex items-center gap-1 text-[12px] text-[#8B8B94]">
                                       <span>Source:</span>
                                       <a
                                         href={ev.url}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-[#A1A1AA] hover:text-[#F4F4F5] underline underline-offset-2 truncate flex items-center gap-1 max-w-[90%]"
+                                        className="text-[#B4B4BC] hover:text-[#F4F4F5] underline underline-offset-2 truncate flex items-center gap-1 max-w-[90%]"
                                         title={ev.url}
                                       >
                                         <span className="truncate">{ev.source || ev.url}</span>
-                                        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" aria-hidden="true" />
                                       </a>
                                     </div>
                                   ) : (
-                                    <div className="pt-0.5 text-xs text-[#71717A]">
+                                    <div className="text-[12px] text-[#8B8B94]">
                                       <span>Source: {ev.source}</span>
                                     </div>
                                   )}
@@ -596,10 +634,8 @@ function IntelligencePageContent() {
 
                         {/* Web Citations */}
                         {msg.sources && msg.sources.length > 0 && (
-                          <div className="mt-3 pt-2">
-                            <span className="text-[13px] text-[#A1A1AA] font-medium block mb-1.5">
-                              Sources
-                            </span>
+                          <div className="mt-4">
+                            <span className="text-[14px] text-[#D4D4D8] font-medium block mb-2">Sources</span>
                             <div className="flex flex-wrap gap-1.5">
                               {msg.sources.map((s, si) => (
                                 <a
@@ -607,11 +643,11 @@ function IntelligencePageContent() {
                                   href={s.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#111114] border border-[#27272A] hover:border-[#3F3F46] text-[11px] text-[#A1A1AA] hover:text-[#F4F4F5] transition-colors max-w-[260px]"
-                                  title={`${s.title} — ${s.url}`}
+                                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[#1C1C21] hover:bg-[#232329] text-[13px] text-[#B4B4BC] hover:text-[#F4F4F5] transition-colors max-w-[280px]"
+                                  title={`${s.title} · ${s.url}`}
                                 >
                                   <span className="truncate">{s.title || s.source}</span>
-                                  <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" />
+                                  <ExternalLink className="w-3 h-3 shrink-0 opacity-60" aria-hidden="true" />
                                 </a>
                               ))}
                             </div>
@@ -620,34 +656,28 @@ function IntelligencePageContent() {
 
                         {/* Mind map + suggested next questions */}
                         <div className="mt-5 space-y-3">
-                          <button
-                            type="button"
-                            onClick={() => setMindMapIndex(index)}
-                            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-[#3F3F46] bg-[#17171B] hover:bg-[#1F1F24] text-[13px] font-medium text-[#F4F4F5] transition-colors cursor-pointer"
-                          >
-                            <Network className="w-4 h-4 text-[#F472B6]" />
+                          <button type="button" onClick={() => setMindMapIndex(index)} className={SECONDARY_INLINE}>
+                            <Network className="w-4 h-4 text-[#B4B4BC]" aria-hidden="true" />
                             See it as a mind map
                           </button>
 
                           {isLatest && (
                             <div>
-                              <span className="block text-[13px] text-[#A1A1AA] font-medium mb-2">
-                                Ask Loopy next
-                              </span>
+                              <span className="block text-[14px] text-[#D4D4D8] font-medium mb-2">Ask Loopy next</span>
                               <div className="flex flex-wrap gap-2">
                                 {suggestionsFor(msg, companyName, has14Day).map((fq, fi) => (
                                   <button
                                     key={fi}
                                     onClick={() => handleAsk(fq.prompt)}
                                     disabled={isAsking}
-                                    className={`text-[13px] px-3 py-1.5 rounded-full border disabled:opacity-40 transition-colors flex items-center gap-1 cursor-pointer text-left ${
+                                    className={`text-[13px] min-h-9 px-3.5 py-1.5 rounded-full active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer text-left ${
                                       fq.primary
-                                        ? "bg-[#F4F4F5] border-[#F4F4F5] text-[#09090B] font-medium hover:bg-white"
-                                        : "border-[#27272A] bg-[#111114] hover:bg-[#17171B] hover:border-[#3F3F46] text-[#D4D4D8] hover:text-[#F4F4F5]"
+                                        ? "bg-[#F4F4F5] text-[#09090B] font-semibold hover:bg-white"
+                                        : "bg-[#1C1C21] hover:bg-[#232329] text-[#D4D4D8] hover:text-[#F4F4F5]"
                                     }`}
                                   >
                                     <span>{fq.label}</span>
-                                    <ChevronRight className="w-3.5 h-3.5 opacity-50 shrink-0" />
+                                    <ChevronRight className="w-3.5 h-3.5 opacity-50 shrink-0" aria-hidden="true" />
                                   </button>
                                 ))}
                               </div>
@@ -655,7 +685,7 @@ function IntelligencePageContent() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
 
@@ -664,14 +694,14 @@ function IntelligencePageContent() {
                   <motion.div
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-3 py-3 text-[13px] text-[#A1A1AA]"
+                    className="flex items-center gap-3 py-3 text-[#B4B4BC]"
                   >
-                    <LoopyMascot size={32} />
-                    <span>Loopy is working on your answer...</span>
+                    <LoopyMascot size={32} mood="float" />
+                    <LatticeLoader label="Loopy is working on your answer" pattern="orbit" fontSize={14} />
                   </motion.div>
                 )}
 
-                <div ref={bottomRef} />
+                <div ref={bottomRef} className="scroll-mb-36" />
               </div>
             )}
             </div>
@@ -692,37 +722,41 @@ function IntelligencePageContent() {
 
         {/* ─── Error State ─── */}
         {!isGathering && (status?.status === "error" || (Boolean(error) && status?.status !== "ready")) && (
-          <div className="py-16 flex flex-col items-center my-auto text-center">
-            <div className="w-10 h-10 rounded-xl bg-red-950/40 border border-red-800/40 flex items-center justify-center mb-4 text-red-400">
-              <AlertCircle className="w-5 h-5" />
-            </div>
-            <h3 className="text-base font-semibold text-[#F4F4F5] mb-1">Session Error</h3>
-            <p className="text-xs text-[#A1A1AA] mb-6 max-w-sm">
-              {error || status?.error || "An error occurred while communicating with the intelligence service."}
+          <div className="py-16 flex flex-col items-center my-auto text-center max-w-md mx-auto">
+            <LoopyMascot size={56} />
+            <h1 className="mt-4 text-[22px] leading-tight font-semibold text-[#F4F4F5]">
+              {status?.status === "error" ? "The research didn't finish" : "We couldn't open this analysis"}
+            </h1>
+            <p className="mt-2 text-[15px] leading-[1.5] text-[#B4B4BC]">
+              {error || status?.error || "Something went wrong while loading it. Please try again."}
             </p>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#17171B] hover:bg-[#27272A] border border-[#27272A] text-[#F4F4F5] text-xs font-medium transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Start New Analysis
-            </Link>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <Link href="/new" className={PRIMARY_INLINE}>
+                <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                Start a new analysis
+              </Link>
+              <Link href="/" className={SECONDARY_INLINE}>
+                Back to home
+              </Link>
+            </div>
           </div>
         )}
       </main>
 
       {/* ─── Sticky Bottom Question Input Bar ─── */}
       {showConversation && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#09090B]/95 backdrop-blur-md border-t border-[#27272A] px-4 py-3">
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#09090B] border-t border-[#1C1C21] px-4 py-3">
           <div className="max-w-3xl mx-auto w-full">
             {error && (
-              <div className="mb-2 px-3 py-1.5 rounded-lg bg-red-950/40 border border-red-800/50 text-red-300 text-xs flex items-center justify-between">
+              <div role="alert" className="mb-2 pl-3.5 pr-1.5 py-1.5 rounded-xl bg-[#1C1C21] text-[13px] text-[#F87171] flex items-center justify-between gap-2">
                 <span>{error}</span>
                 <button
+                  type="button"
                   onClick={() => setError("")}
-                  className="text-red-400 hover:text-red-200 text-xs ml-2 cursor-pointer"
+                  aria-label="Dismiss"
+                  className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[#B4B4BC] hover:text-white hover:bg-[#2A2A30] transition-colors cursor-pointer"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -732,50 +766,56 @@ function IntelligencePageContent() {
                 <button
                   type="button"
                   onClick={() => askToLogIn("chat")}
-                  className="w-full flex items-center gap-3 bg-[#111114] border border-[#27272A] hover:border-[#3F3F46] rounded-xl pl-4 pr-2.5 py-2 text-left transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-3 bg-[#1C1C21] hover:bg-[#232329] rounded-2xl pl-4 pr-2 py-2 text-left transition-colors cursor-pointer"
                 >
-                  <Lock className="w-4 h-4 text-[#A1A1AA] shrink-0" />
-                  <span className="flex-1 text-sm text-[#A1A1AA]">Log in to ask Loopy follow-up questions</span>
-                  <span className="shrink-0 px-3 py-1.5 rounded-lg bg-[#F4F4F5] text-[#09090B] text-xs font-medium">
+                  <Lock className="w-4 h-4 text-[#B4B4BC] shrink-0" aria-hidden="true" />
+                  <span className="flex-1 text-[14px] text-[#B4B4BC]">Log in to ask Loopy follow-up questions</span>
+                  <span className="shrink-0 inline-flex items-center h-8 px-4 rounded-full bg-[#F4F4F5] text-[#09090B] text-[13px] font-semibold">
                     Log in
                   </span>
                 </button>
-                <div className="text-[11px] text-[#71717A] mt-1.5 px-1 text-center sm:text-left">
-                  <span>Logging in also unlocks the search intel and saves this analysis to your History.</span>
-                </div>
+                <p className="text-[12px] text-[#8B8B94] mt-1.5 px-1 text-center sm:text-left">
+                  Logging in also shows the search intel and saves this analysis to your History.
+                </p>
               </>
             ) : (
               <>
-              <div className="relative flex items-end bg-[#111114] border border-[#27272A] focus-within:border-[#3F3F46] rounded-xl transition-all shadow-sm">
-                <textarea
-                  ref={inputRef}
-                  rows={1}
-                  value={question}
-                  onChange={handleTextareaInput}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleAsk();
-                    }
-                  }}
-                  placeholder="Ask a strategic question or follow up on your execution roadmap..."
-                  disabled={isAsking}
-                  className="w-full bg-transparent text-[#F4F4F5] text-sm placeholder:text-[#52525B] px-4 py-3 pr-12 resize-none focus:outline-none min-h-[46px] max-h-[180px] leading-relaxed"
-                />
+                <div className="relative flex items-end bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] focus-within:border-[#8B5CF6] rounded-2xl transition-colors">
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    value={question}
+                    onChange={handleTextareaInput}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAsk();
+                      }
+                    }}
+                    aria-label={`Ask Loopy about ${companyName}`}
+                    placeholder="Ask Loopy about this analysis…"
+                    disabled={isAsking}
+                    className="w-full bg-transparent text-[#F4F4F5] text-[15px] placeholder:text-[#8B8B94] px-4 py-3 pr-14 resize-none focus:outline-none min-h-[48px] max-h-[180px] leading-relaxed"
+                  />
 
-                <button
-                  onClick={() => handleAsk()}
-                  disabled={!question.trim() || isAsking}
-                  className="absolute right-2.5 bottom-2 w-8 h-8 rounded-lg bg-[#F4F4F5] text-[#09090B] flex items-center justify-center hover:bg-white disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
-                  title="Send message (Enter)"
-                >
-                  <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-                </button>
-              </div>
-
-                <div className="text-[11px] text-[#71717A] mt-1.5 px-1 text-center sm:text-left">
-                  <span>Press Enter to send · Shift + Enter for new line</span>
+                  {/* React Bits SlingButton: tap to send, or pull it back like a slingshot and let go */}
+                  <span className="absolute right-1.5 bottom-1">
+                    <SlingButton
+                      onSend={() => handleAsk()}
+                      disabled={!question.trim() || isAsking}
+                      ariaLabel="Send"
+                      size={40}
+                      padColor="#F4F4F5"
+                      iconColor="#09090B"
+                      accentColor="#8B5CF6"
+                      wellColor="#1C1C21"
+                      bandColor="#52525B"
+                      particles={10}
+                    />
+                  </span>
                 </div>
+
+                <p className="text-[12px] text-[#8B8B94] mt-1.5 px-1 text-center sm:text-left">Press Enter to send, Shift + Enter for a new line</p>
               </>
             )}
           </div>
@@ -789,8 +829,8 @@ function IntelligencePageContent() {
         title={loginReason === "intel" ? "Log in to see the search intel" : "Log in to keep chatting"}
         description={
           loginReason === "intel"
-            ? `See what ${companyName}'s buyers ask Google, the ads running in this market, and who you're up against.`
-            : `Your 7-day strategy for ${companyName} is ready. Log in to ask Loopy follow-up questions, unlock the search intel, and save this analysis to your History.`
+            ? `See what ${possessive(companyName)} buyers ask Google, the ads running in this market, and who you're up against.`
+            : `Your 7-day strategy for ${companyName} is ready. Log in to ask Loopy follow-up questions, see the search intel, and save this analysis to your History.`
         }
       />
 
@@ -803,6 +843,7 @@ function IntelligencePageContent() {
         />
       )}
     </div>
+    </MotionConfig>
   );
 }
 

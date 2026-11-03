@@ -3,14 +3,17 @@ import { NewAnalysis } from "@/components/onboarding/NewAnalysis";
 import { getCurrentUser } from "@/lib/auth/supabase-server";
 import { profileOf } from "@/lib/auth/profile";
 
-export default async function NewAnalysisPage() {
+/** `?website=` comes from the dashboard's website field and wins over the profile's site. */
+export default async function NewAnalysisPage({ searchParams }: { searchParams: Promise<{ website?: string }> }) {
+  const { website } = await searchParams;
   const user = await getCurrentUser();
   const profile = user ? profileOf(user) : null;
+  const fromLink = typeof website === "string" && /^https?:\/\/[^\s]+\.[^\s]+$/i.test(website) ? website : undefined;
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-[#09090B]">
       <AppNav profile={profile} active="new" />
-      <NewAnalysis defaultWebsite={profile?.companyWebsite || undefined} />
+      <NewAnalysis defaultWebsite={fromLink || profile?.companyWebsite || undefined} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Mail, X } from "lucide-react";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
+import { PRIMARY, SECONDARY, TEXT_LINK } from "@/components/ui/fields";
 import { startGoogleSignIn } from "@/lib/auth/google";
 
 interface LoginPromptProps {
@@ -52,7 +53,7 @@ export function LoginPrompt({ open, onClose, next, title, description }: LoginPr
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -62,7 +63,7 @@ export function LoginPrompt({ open, onClose, next, title, description }: LoginPr
             role="dialog"
             aria-modal="true"
             aria-labelledby="login-prompt-title"
-            className="relative w-full max-w-sm rounded-2xl bg-[#0D0D10] border border-[#27272A] p-6 shadow-2xl"
+            className="relative w-full max-w-[400px] rounded-[20px] bg-[#111114] p-6 sm:p-7"
             initial={{ y: 12, scale: 0.97 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 8, scale: 0.97 }}
@@ -73,46 +74,37 @@ export function LoginPrompt({ open, onClose, next, title, description }: LoginPr
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center text-[#71717A] hover:text-[#F4F4F5] hover:bg-[#17171B] cursor-pointer"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-[#8B8B94] hover:text-white hover:bg-[#1C1C21] transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex flex-col items-center text-center">
-              <LoopyMascot size={64} mood="wave" />
-              <h2 id="login-prompt-title" className="mt-3 text-[17px] font-semibold text-[#F4F4F5]">
+              <LoopyMascot size={56} />
+              <h2 id="login-prompt-title" className="mt-3 text-[20px] leading-tight font-semibold text-[#F4F4F5]">
                 {title}
               </h2>
-              <p className="mt-1.5 text-[13px] text-[#A1A1AA] leading-relaxed">{description}</p>
+              <p className="mt-2 text-[14px] text-[#B4B4BC] leading-relaxed">{description}</p>
             </div>
 
-            <div className="mt-5 space-y-2">
-              <button
-                type="button"
-                onClick={continueWithGoogle}
-                disabled={busy}
-                autoFocus
-                className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-[#09090B] font-medium text-sm py-2.5 hover:bg-[#F4F4F5] disabled:opacity-40 transition-colors cursor-pointer"
-              >
+            <div className="mt-6 space-y-2.5">
+              <button type="button" onClick={continueWithGoogle} disabled={busy} autoFocus className={`${PRIMARY} inline-flex items-center justify-center gap-2.5`}>
                 <GoogleIcon />
-                Continue with Google
+                {busy ? "Opening Google…" : "Continue with Google"}
               </button>
-              <Link
-                href={`/login?next=${encodeURIComponent(next)}`}
-                className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-[#27272A] bg-[#141418] text-[#F4F4F5] font-medium text-sm py-2.5 hover:border-[#3F3F46] hover:bg-[#18181D] transition-colors"
-              >
-                <Mail className="w-4 h-4 text-[#A1A1AA]" />
+              <Link href={`/login?next=${encodeURIComponent(next)}`} className={SECONDARY}>
+                <Mail className="w-4 h-4 text-[#B4B4BC]" aria-hidden="true" />
                 Continue with email
               </Link>
             </div>
 
-            {error && <p className="mt-3 text-center text-[12px] text-[#F87171]">{error}</p>}
+            {error && (
+              <p role="alert" className="mt-3 text-center text-[13px] text-[#F87171]">
+                {error}
+              </p>
+            )}
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-3 w-full py-1 text-[12px] text-[#71717A] hover:text-[#A1A1AA] cursor-pointer"
-            >
+            <button type="button" onClick={onClose} className={`${TEXT_LINK} mt-4 w-full py-1`}>
               Not now
             </button>
           </motion.div>

@@ -55,5 +55,5 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Pages only. API routes check the login themselves, and static files never need it,
   // so the frequent status polling doesn't pay for an auth round trip each time.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm)$).*)"],
 };

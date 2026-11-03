@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Tip } from "@/components/ui/Tip";
+import { toast } from "@/lib/toast";
 
 interface DeleteAnalysisButtonProps {
   sessionId: string;
@@ -34,23 +36,27 @@ export function DeleteAnalysisButton({ sessionId, companyName, className = "" }:
     }
     setOpen(false);
     setBusy(false);
+    toast(`${companyName} deleted`, { description: "The analysis and its chat are gone from your History." });
     router.refresh();
   };
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          setError("");
-          setOpen(true);
-        }}
-        aria-label={`Delete the analysis of ${companyName}`}
-        title="Delete analysis"
-        className={`w-8 h-8 rounded-lg flex items-center justify-center text-[#71717A] hover:text-[#F87171] hover:bg-[#7F1D1D]/20 transition-colors cursor-pointer ${className}`}
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
+      <span className={className}>
+        <Tip label="Delete analysis">
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setOpen(true);
+            }}
+            aria-label={`Delete the analysis of ${companyName}`}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-[#8B8B94] hover:text-[#F87171] hover:bg-[#7F1D1D]/25 active:scale-90 transition cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </Tip>
+      </span>
       <ConfirmDialog
         open={open}
         title={`Delete ${companyName}?`}

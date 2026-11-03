@@ -333,11 +333,15 @@ export async function getSession(
 
   if (!session) return undefined;
 
-  // Check in-memory TTL
-  const age = Date.now() - new Date(session.createdAt).getTime();
-  if (age > SESSION_TTL_MS) {
-    memory.delete(sessionId);
-    return undefined;
+  // The TTL only bounds the in-memory cache. Analyses saved in Supabase stay openable from
+  // History forever; the cleanup timer just drops them from memory until the next read.
+  // Without a database, memory is the only copy, so old sessions expire for real.
+  if (!getSupabase()) {
+    const age = Date.now() - new Date(session.createdAt).getTime();
+    if (age > SESSION_TTL_MS) {
+      memory.delete(sessionId);
+      return undefined;
+    }
   }
 
   return session;
@@ -598,6 +602,7 @@ export async function listSessionSummaries(userId: string, limit = 50): Promise<
         id: row.id as string,
         companyName: input.companyName || (row.company_name as string | null) || displayDomain(input.website) || "Untitled analysis",
         website: input.website || "",
+        industry: input.industry || "",
         status: row.status as PipelineStatus,
         createdAt: row.created_at as string,
         updatedAt: row.updated_at as string,

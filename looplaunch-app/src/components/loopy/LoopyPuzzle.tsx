@@ -280,7 +280,7 @@ export function LoopyPuzzle({ messages = DEFAULT_MESSAGES, className = "" }: Loo
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.25 }}
-            className="text-[11px] font-mono text-[#71717A]"
+            className="text-[13px] text-[#8B8B94]"
             aria-live="polite"
           >
             {messages[msgIdx % messages.length]}

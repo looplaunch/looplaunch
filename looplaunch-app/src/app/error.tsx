@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
+import { PRIMARY_INLINE, SECONDARY_INLINE } from "@/components/ui/fields";
 
 export default function Error({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
@@ -10,23 +11,18 @@ export default function Error({ error, retry }: { error: Error & { digest?: stri
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-6">
+    <div className="min-h-svh bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-6">
       <div className="max-w-sm text-center flex flex-col items-center">
         <LoopyMascot size={72} mood="still" />
-        <h1 className="mt-5 text-xl font-semibold tracking-tight">Something went wrong</h1>
-        <p className="mt-2 text-sm text-[#A1A1AA]">Loopy tripped over something. Try again, and if it keeps happening, head home.</p>
+        <h1 className="mt-5 text-[22px] leading-tight font-semibold tracking-[-0.01em]">Something went wrong</h1>
+        <p className="mt-2 text-[15px] leading-[1.5] text-[#B4B4BC]">
+          Loopy tripped over something. Try again, and if it keeps happening, head home.
+        </p>
         <div className="mt-6 flex gap-2">
-          <button
-            type="button"
-            onClick={() => retry()}
-            className="px-4 py-2 rounded-lg bg-[#F4F4F5] text-[#09090B] text-sm font-medium hover:bg-white transition-colors cursor-pointer"
-          >
+          <button type="button" onClick={() => retry()} className={PRIMARY_INLINE}>
             Try again
           </button>
-          <Link
-            href="/"
-            className="px-4 py-2 rounded-lg border border-[#3F3F46] text-sm font-medium text-[#F4F4F5] hover:bg-[#17171B] transition-colors"
-          >
+          <Link href="/" className={SECONDARY_INLINE}>
             Go home
           </Link>
         </div>

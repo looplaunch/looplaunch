@@ -3,16 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
+import RubberSegment from "@/components/reactbits/RubberSegment";
 import { Avatar } from "@/components/auth/Avatar";
+import { SettingsSection } from "@/components/profile/SettingsSection";
+import { FIELD, LABEL, PRIMARY_INLINE } from "@/components/ui/fields";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
+import { toast } from "@/lib/toast";
 import { AVATAR_COLORS, initialsOf, type ProfileInfo } from "@/lib/auth/profile";
 
-const CARD = "rounded-2xl border border-[#27272A] bg-[#111114] p-5 sm:p-6";
-const LABEL = "block text-[13px] font-medium text-[#D4D4D8] mb-1.5";
-const INPUT =
-  "w-full rounded-lg bg-[#09090B] border border-[#27272A] px-3.5 py-2.5 text-sm text-[#F4F4F5] placeholder:text-[#52525B] focus:outline-none focus:border-[#8B5CF6] transition-colors";
-const PRIMARY =
-  "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#F4F4F5] text-[#09090B] text-sm font-medium hover:bg-white disabled:opacity-40 transition-colors cursor-pointer";
+const INPUT = `${FIELD} pr-3.5`;
 
 type Note = { ok: boolean; text: string } | null;
 
@@ -55,114 +54,115 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
       return;
     }
     setNote({ ok: true, text: "Saved." });
+    toast("Profile saved", { description: "Your name, business and picture are up to date." });
     router.refresh();
   };
 
   return (
-    <div className="space-y-5">
-      <form onSubmit={save} className="space-y-5">
-        <section className={CARD}>
-          <h2 className="text-[15px] font-semibold mb-4">You</h2>
-
-          <div className="flex items-center gap-4 mb-5">
-            <Avatar profile={preview} size={64} />
-            <div className="space-y-2">
-              {profile.googlePhotoUrl && (
-                <div className="flex gap-1 p-1 rounded-lg bg-[#09090B] border border-[#27272A] w-fit">
-                  {[
-                    { photo: true, label: "Google photo" },
-                    { photo: false, label: "Initials" },
-                  ].map((o) => (
-                    <button
-                      key={o.label}
-                      type="button"
-                      onClick={() => setUsePhoto(o.photo)}
-                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                        usePhoto === o.photo ? "bg-[#27272A] text-[#F4F4F5]" : "text-[#A1A1AA] hover:text-[#F4F4F5]"
-                      }`}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {!usePhoto && (
-                <div className="flex items-center gap-2" role="radiogroup" aria-label="Avatar color">
-                  {AVATAR_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      role="radio"
-                      aria-checked={color === c}
-                      aria-label={`Color ${c}`}
-                      onClick={() => setColor(c)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center ring-offset-2 ring-offset-[#111114] transition cursor-pointer"
-                      style={{ background: c, boxShadow: color === c ? `0 0 0 2px #111114, 0 0 0 4px ${c}` : undefined }}
-                    >
-                      {color === c && <Check className="w-3.5 h-3.5 text-white" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="pf-name" className={LABEL}>
-                Name
-              </label>
-              <input id="pf-name" value={name} onChange={(e) => setName(e.target.value)} className={INPUT} maxLength={60} />
-            </div>
-            <div>
-              <label htmlFor="pf-role" className={LABEL}>
-                What you do
-              </label>
-              <input
-                id="pf-role"
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-                placeholder="Founder, marketer, agency…"
-                className={INPUT}
-                maxLength={60}
+    <form onSubmit={save}>
+      <SettingsSection
+        id="settings-profile"
+        title="Profile"
+        description="How you appear in Loop Launch, and the business we fill in when you start an analysis."
+      >
+        <div className="flex items-center gap-4">
+          <Avatar profile={preview} size={64} />
+          <div className="space-y-3">
+            {profile.googlePhotoUrl && (
+              <RubberSegment
+                items={[
+                  { value: "photo", label: "Google photo" },
+                  { value: "initials", label: "Initials" },
+                ]}
+                value={usePhoto ? "photo" : "initials"}
+                onChange={(v) => setUsePhoto(v === "photo")}
+                aria-label="Avatar"
+                size="sm"
+                radius={999}
+                trackColor="#09090B"
+                thumbColor="#2A2A30"
+                textColor="#B4B4BC"
+                activeTextColor="#F4F4F5"
               />
-            </div>
+            )}
+            {!usePhoto && (
+              <div className="flex items-center gap-2.5" role="radiogroup" aria-label="Avatar colour">
+                {AVATAR_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    role="radio"
+                    aria-checked={color === c}
+                    aria-label={`Colour ${c}`}
+                    onClick={() => setColor(c)}
+                    className="w-7 h-7 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition cursor-pointer"
+                    style={{ background: c, boxShadow: color === c ? `0 0 0 2px #111114, 0 0 0 4px ${c}` : undefined }}
+                  >
+                    {color === c && <Check className="w-3.5 h-3.5 text-white" aria-hidden="true" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        </section>
+        </div>
 
-        <section className={CARD}>
-          <h2 className="text-[15px] font-semibold">Your business</h2>
-          <p className="text-[13px] text-[#A1A1AA] mt-1 mb-4">We fill in your website when you start a new analysis.</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="pf-company" className={LABEL}>
-                Company name
-              </label>
-              <input id="pf-company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={INPUT} maxLength={80} />
-            </div>
-            <div>
-              <label htmlFor="pf-site" className={LABEL}>
-                Website
-              </label>
-              <input
-                id="pf-site"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                placeholder="yourcompany.com"
-                className={INPUT}
-                maxLength={120}
-              />
-            </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="pf-name" className={LABEL}>
+              Name
+            </label>
+            <input id="pf-name" value={name} onChange={(e) => setName(e.target.value)} className={INPUT} maxLength={60} />
           </div>
-        </section>
+          <div>
+            <label htmlFor="pf-role" className={LABEL}>
+              What you do
+            </label>
+            <input
+              id="pf-role"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="Founder, marketer, agency…"
+              className={INPUT}
+              maxLength={60}
+            />
+          </div>
+        </div>
 
-        <div className="flex items-center gap-3">
-          <button type="submit" disabled={saving} className={PRIMARY}>
+        <h3 className="mt-8 text-[14px] font-medium text-[#F4F4F5]">Your business</h3>
+        <p className="mt-1 text-[14px] text-[#B4B4BC]">We fill in your website when you start a new analysis.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="pf-company" className={LABEL}>
+              Company name
+            </label>
+            <input id="pf-company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={INPUT} maxLength={80} />
+          </div>
+          <div>
+            <label htmlFor="pf-site" className={LABEL}>
+              Website
+            </label>
+            <input
+              id="pf-site"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="yourcompany.com"
+              className={INPUT}
+              maxLength={120}
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+          {note && (
+            <span role={note.ok ? "status" : "alert"} className={`text-[13px] ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>
+              {note.text}
+            </span>
+          )}
+          <button type="submit" disabled={saving} className={PRIMARY_INLINE}>
             {saving ? "Saving…" : "Save changes"}
           </button>
-          {note && <span className={`text-sm ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>{note.text}</span>}
         </div>
-      </form>
-    </div>
+      </SettingsSection>
+    </form>
   );
 }

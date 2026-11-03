@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Figtree } from "next/font/google";
 import { useOnboarding } from "@/lib/onboarding/context";
 import { LandingNav } from "./LandingNav";
 import { HeroSection } from "./HeroSection";
@@ -12,6 +13,11 @@ import { StrategyOutputSection } from "./StrategyOutputSection";
 import { FinalCtaSection } from "./FinalCtaSection";
 import { LandingFooter } from "./LandingFooter";
 import { WaitlistHero, WAITLIST_INPUT_ID } from "@/components/waitlist/WaitlistHero";
+import { SmoothScroll } from "./SmoothScroll";
+
+// The landing page keeps its original typeface: Figtree takes over the --font-brand variable that
+// font-sans reads (the signed-in app sets it to Jost in the root layout).
+const figtree = Figtree({ subsets: ["latin"], variable: "--font-brand", display: "swap" });
 
 const scrollToHero = () => {
   document.getElementById("hero-section")?.scrollIntoView({ behavior: "smooth" });
@@ -77,7 +83,12 @@ function LandingLayout({
   waitlist = false,
 }: LandingLayoutProps) {
   return (
-    <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary selection:bg-white/10 selection:text-white">
+    <div
+      className={`${figtree.variable} font-sans min-h-screen flex flex-col bg-bg-primary text-text-primary selection:bg-white/10 selection:text-white`}
+    >
+      {/* The slow, smooth wheel scroll asked for on the landing page */}
+      <SmoothScroll />
+
       {/* 1. Navigation */}
       <LandingNav onGetStarted={onNavCta} ctaLabel={navCtaLabel} appLinks={!waitlist} />
 

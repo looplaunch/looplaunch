@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { Plus } from "lucide-react";
+import PillNav from "@/components/reactbits/PillNav";
 import { LogoMenu } from "@/components/brand/LogoMenu";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import type { ProfileInfo } from "@/lib/auth/profile";
@@ -13,28 +15,36 @@ interface AppNavProps {
 
 /** Top bar for signed-in pages: logo menu, Home / History, New analysis, account. */
 export function AppNav({ profile, active }: AppNavProps) {
-  const tab = (href: string, label: string, isActive: boolean) => (
-    <Link
-      href={href}
-      aria-current={isActive ? "page" : undefined}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-        isActive ? "text-[#F4F4F5] bg-[#17171B]" : "text-[#A1A1AA] hover:text-[#F4F4F5]"
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  const activeHref = active === "home" ? "/" : active === "history" ? "/history" : undefined;
 
   return (
-    <header className="sticky top-0 z-40 h-14 bg-[#09090B]/95 backdrop-blur-md border-b border-[#27272A]">
-      <div className="mx-auto max-w-6xl h-full px-4 sm:px-6 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 h-14 bg-[#09090B] border-b border-[#1C1C21]">
+      <div className="mx-auto max-w-[1148px] h-full px-4 sm:px-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-5">
           <LogoMenu />
           {profile && (
-            <nav className="hidden sm:flex items-center gap-1" aria-label="Main">
-              {tab("/", "Home", active === "home")}
-              {tab("/history", "History", active === "history")}
-            </nav>
+            // React Bits PillNav: a white fill rises through a link as its label rolls over; a purple dot marks the page
+            <div className="hidden sm:block">
+              <PillNav
+                items={[
+                  { label: "Home", href: "/" },
+                  { label: "History", href: "/history" },
+                ]}
+                activeHref={activeHref ?? ""}
+                linkComponent={Link}
+                size="sm"
+                surface="none"
+                collapse="never"
+                itemStyle="plain"
+                hoverEffect="fill"
+                indicator="dot"
+                intro={false}
+                highlightColor="#F4F4F5"
+                highlightTextColor="#09090B"
+                textColor="#9A9AA3"
+                style={{ "--pn-pill-shadow": "none", "--pn-dot": "#8B5CF6", "--pn-strong": "#F4F4F5" } as CSSProperties}
+              />
+            </div>
           )}
         </div>
 
@@ -42,9 +52,9 @@ export function AppNav({ profile, active }: AppNavProps) {
           {profile && active !== "new" && (
             <Link
               href="/new"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#8B5CF6] text-white hover:bg-[#7C3AED] transition-colors"
+              className="group inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-sm font-medium text-[#F4F4F5] border border-[#3F3F48] hover:border-[#71717A] hover:bg-[#17171B] active:scale-[0.96] transition"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 transition-transform duration-300 group-hover:rotate-90" />
               <span className="hidden sm:inline">New analysis</span>
             </Link>
           )}

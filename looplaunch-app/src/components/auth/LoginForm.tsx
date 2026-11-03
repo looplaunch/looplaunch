@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { FIELD, LABEL, PRIMARY, SECONDARY, TEXT_LINK } from "@/components/ui/fields";
 import { OtpInput } from "@/components/auth/OtpInput";
+import RubberSegment from "@/components/reactbits/RubberSegment";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
@@ -19,12 +22,6 @@ interface LoginFormProps {
   /** Set when a sign-in (Google) or password reset link came back with an error. */
   failed?: "auth" | "reset";
 }
-
-const INPUT =
-  "w-full rounded-lg bg-[#09090B] border border-[#27272A] px-3.5 py-2.5 text-sm text-[#F4F4F5] placeholder:text-[#52525B] focus:outline-none focus:border-[#8B5CF6] transition-colors";
-const PRIMARY =
-  "w-full rounded-lg bg-[#F4F4F5] text-[#09090B] font-medium text-sm py-2.5 hover:bg-white disabled:opacity-40 transition-colors cursor-pointer";
-const LINK = "hover:text-[#F4F4F5] cursor-pointer";
 
 const FAILED_MESSAGES = {
   auth: "Sign-in didn't finish. Please try again.",
@@ -42,8 +39,11 @@ export function LoginForm({ next, failed }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [openingGoogle, setOpeningGoogle] = useState(false);
   const [error, setError] = useState(failed ? FAILED_MESSAGES[failed] : "");
   const [info, setInfo] = useState("");
+  const emailId = useId();
+  const passwordId = useId();
 
   const finish = () => {
     router.replace(next);
@@ -60,10 +60,12 @@ export function LoginForm({ next, failed }: LoginFormProps) {
   const signInWithGoogle = async () => {
     setError("");
     setBusy(true);
+    setOpeningGoogle(true);
     const message = await startGoogleSignIn(next);
     if (message) {
       setError(message);
       setBusy(false);
+      setOpeningGoogle(false);
     }
   };
 
@@ -167,86 +169,109 @@ export function LoginForm({ next, failed }: LoginFormProps) {
 
   return (
     <AuthShell title={titles[step][0]} subtitle={titles[step][1]}>
+      <MotionConfig reducedMotion="user">
+      <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={step}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
+        exit={{ opacity: 0, y: -4, transition: { duration: 0.12, ease: [0.55, 0.055, 0.675, 0.19] } }}
+      >
       {step === "form" && (
         <>
-          <button
-            type="button"
-            onClick={signInWithGoogle}
-            disabled={busy}
-            className="w-full flex items-center justify-center gap-2.5 rounded-lg bg-white text-[#09090B] font-medium text-sm py-2.5 hover:bg-[#F4F4F5] disabled:opacity-40 transition-colors cursor-pointer"
-          >
+          <button type="button" onClick={signInWithGoogle} disabled={busy} className={SECONDARY}>
             <GoogleIcon />
-            Continue with Google
+            {openingGoogle ? "Opening Google…" : "Continue with Google"}
           </button>
 
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-[#27272A]" />
-            <span className="text-[11px] uppercase tracking-wider text-[#52525B]">or</span>
-            <div className="flex-1 h-px bg-[#27272A]" />
+          <div className="my-6 flex items-center gap-3 text-[13px] text-[#8B8B94]">
+            <span className="h-px flex-1 bg-[#26262C]" aria-hidden="true" />
+            or use your email
+            <span className="h-px flex-1 bg-[#26262C]" aria-hidden="true" />
           </div>
 
-          <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-lg bg-[#09090B] border border-[#27272A]">
-            {(["signin", "signup"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setError("");
-                  setInfo("");
-                }}
-                className={`rounded-md py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  mode === m ? "bg-[#27272A] text-[#F4F4F5]" : "text-[#A1A1AA] hover:text-[#F4F4F5]"
-                }`}
-              >
-                {m === "signin" ? "Log in" : "Create account"}
-              </button>
-            ))}
-          </div>
+          <RubberSegment
+            items={[
+              { value: "signin", label: "Log in" },
+              { value: "signup", label: "Create account" },
+            ]}
+            value={mode}
+            onChange={(v) => {
+              setMode(v as Mode);
+              setError("");
+              setInfo("");
+            }}
+            aria-label="Log in or create an account"
+            size="sm"
+            radius={999}
+            trackColor="#09090B"
+            thumbColor="#2A2A30"
+            textColor="#B4B4BC"
+            activeTextColor="#F4F4F5"
+            className="w-full mb-5"
+          />
 
-          <form onSubmit={submitPassword} className="space-y-3">
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={INPUT}
-            />
-            <PasswordInput
-              required
-              minLength={6}
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              placeholder="Password (6+ characters)"
-              value={password}
-              onChange={setPassword}
-            />
-            {mode === "signin" && (
-              <div className="flex justify-end -mt-1">
-                <button type="button" onClick={() => goTo("forgot")} className={`text-xs text-[#A1A1AA] ${LINK}`}>
-                  Forgot password?
-                </button>
+          <form onSubmit={submitPassword} className="space-y-4">
+            <div>
+              <label htmlFor={emailId} className={LABEL}>
+                Email
+              </label>
+              <input
+                id={emailId}
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`${FIELD} pr-3.5`}
+              />
+            </div>
+            <div>
+              <div className="flex items-baseline justify-between gap-3 mb-2">
+                <label htmlFor={passwordId} className="text-[14px] font-medium text-[#D4D4D8]">
+                  Password
+                </label>
+                {mode === "signin" && (
+                  <button type="button" onClick={() => goTo("forgot")} className={TEXT_LINK}>
+                    Forgot password?
+                  </button>
+                )}
               </div>
-            )}
+              <PasswordInput
+                id={passwordId}
+                required
+                minLength={6}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                placeholder={mode === "signup" ? "6 characters or more" : undefined}
+                value={password}
+                onChange={setPassword}
+              />
+            </div>
             <button type="submit" disabled={busy} className={PRIMARY}>
-              {mode === "signin" ? "Log in" : "Create account"}
+              {busy && !openingGoogle
+                ? mode === "signin"
+                  ? "Logging in…"
+                  : "Creating account…"
+                : mode === "signin"
+                  ? "Log in"
+                  : "Create account"}
             </button>
           </form>
         </>
       )}
 
       {step === "code" && (
-        <form onSubmit={verifyCode} className="space-y-3">
-          <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus />
+        <form onSubmit={verifyCode} className="space-y-4">
+          <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus status={error ? "error" : "idle"} />
           <button type="submit" disabled={busy || code.length !== 6} className={PRIMARY}>
-            Verify and continue
+            {busy ? "Checking…" : "Verify and continue"}
           </button>
-          <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
-            <button type="button" onClick={resendCode} className={LINK}>
+          <div className="flex items-center justify-between gap-3">
+            <button type="button" onClick={resendCode} className={TEXT_LINK}>
               Send a new code
             </button>
-            <button type="button" onClick={() => goTo("form")} className={LINK}>
+            <button type="button" onClick={() => goTo("form")} className={TEXT_LINK}>
               Use a different email
             </button>
           </div>
@@ -254,22 +279,28 @@ export function LoginForm({ next, failed }: LoginFormProps) {
       )}
 
       {step === "forgot" && (
-        <form onSubmit={sendResetLink} className="space-y-3">
-          <input
-            type="email"
-            required
-            autoFocus
-            autoComplete="email"
-            placeholder="you@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={INPUT}
-          />
+        <form onSubmit={sendResetLink} className="space-y-4">
+          <div>
+            <label htmlFor={emailId} className={LABEL}>
+              Email
+            </label>
+            <input
+              id={emailId}
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              placeholder="you@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`${FIELD} pr-3.5`}
+            />
+          </div>
           <button type="submit" disabled={busy} className={PRIMARY}>
             {busy ? "Sending…" : "Send reset link"}
           </button>
-          <div className="text-center text-xs text-[#A1A1AA] pt-1">
-            <button type="button" onClick={() => goTo("form")} className={LINK}>
+          <div className="text-center">
+            <button type="button" onClick={() => goTo("form")} className={TEXT_LINK}>
               Back to log in
             </button>
           </div>
@@ -277,21 +308,33 @@ export function LoginForm({ next, failed }: LoginFormProps) {
       )}
 
       {step === "sent" && (
-        <div className="space-y-3">
-          <p className="text-xs text-[#A1A1AA] leading-relaxed text-center">Didn&apos;t get it? Check your spam folder.</p>
-          <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
-            <button type="button" onClick={() => sendResetLink()} disabled={busy} className={LINK}>
-              Send it again
+        <div className="space-y-4">
+          <p className="text-[14px] text-[#B4B4BC] leading-relaxed">Didn&apos;t get it? Check your spam folder.</p>
+          <div className="flex items-center justify-between gap-3">
+            <button type="button" onClick={() => sendResetLink()} disabled={busy} className={TEXT_LINK}>
+              {busy ? "Sending…" : "Send it again"}
             </button>
-            <button type="button" onClick={() => goTo("form")} className={LINK}>
+            <button type="button" onClick={() => goTo("form")} className={TEXT_LINK}>
               Back to log in
             </button>
           </div>
         </div>
       )}
 
-      {error && <p className="mt-4 text-xs text-[#F87171] leading-relaxed">{error}</p>}
-      {info && <p className="mt-4 text-xs text-[#A1A1AA] leading-relaxed">{info}</p>}
+      </motion.div>
+      </AnimatePresence>
+      </MotionConfig>
+
+      {error && (
+        <p role="alert" className="mt-4 text-[13px] text-[#F87171] leading-relaxed">
+          {error}
+        </p>
+      )}
+      {info && (
+        <p role="status" className="mt-4 text-[13px] text-[#B4B4BC] leading-relaxed">
+          {info}
+        </p>
+      )}
     </AuthShell>
   );
 }

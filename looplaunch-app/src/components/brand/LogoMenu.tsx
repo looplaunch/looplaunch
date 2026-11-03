@@ -4,11 +4,12 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "motion/react";
-import { Home, Plus, X } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { ArrowRight, Home, Plus, X } from "lucide-react";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { useAuthUser } from "@/lib/auth/use-auth-user";
 import { clearOnboardingProgress } from "@/lib/onboarding/context";
+import { smoothScrollTo } from "@/lib/smooth-scroll";
 
 interface LogoMenuProps {
   /** Extra line in the pop-up, e.g. a reminder that this analysis isn't saved */
@@ -20,17 +21,18 @@ interface LogoMenuProps {
 const noopSubscribe = () => () => {};
 
 const OPTION =
-  "w-full flex items-start gap-3 p-3.5 rounded-xl border border-[#27272A] bg-[#141418] hover:border-[#3F3F46] hover:bg-[#18181D] text-left transition-colors cursor-pointer";
+  "group w-full flex items-center gap-3 px-4 py-3.5 rounded-[14px] bg-[#1C1C21] hover:bg-[#232329] active:scale-[0.99] text-left transition cursor-pointer";
 
 /** The Loop Launch logo. Clicking it asks where to go: the home page, or a fresh analysis. */
 export function LogoMenu({ note, children }: LogoMenuProps) {
   const router = useRouter();
   const pathname = usePathname();
   const user = useAuthUser();
+  const reduce = useReducedMotion();
   const [open, setOpen] = useState(false);
   // Signed-out visitors answer the questions right on the landing page.
   const onLanding = pathname === "/" && !user;
-  // The pop-up is portalled to <body>: headers use backdrop-blur, which would trap a fixed overlay inside them.
+  // The pop-up is portalled to <body>, so no header can trap the fixed overlay inside it.
   const isClient = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   useEffect(() => {
@@ -42,35 +44,46 @@ export function LogoMenu({ note, children }: LogoMenuProps) {
 
   const goHome = () => {
     setOpen(false);
-    if (onLanding) window.scrollTo({ top: 0, behavior: "smooth" });
+    if (onLanding) smoothScrollTo("top");
     else router.push("/");
   };
 
   const startFresh = () => {
     clearOnboardingProgress();
     setOpen(false);
-    if (onLanding) document.getElementById("hero-section")?.scrollIntoView({ behavior: "smooth" });
+    const hero = document.getElementById("hero-section");
+    if (onLanding && hero) smoothScrollTo(hero);
     else router.push("/new");
   };
+
+  const options = [
+    {
+      icon: Home,
+      title: "Go to home page",
+      detail: user ? "Your dashboard and past analyses." : "Back to the Loop Launch home page.",
+      onClick: goHome,
+    },
+    { icon: Plus, title: "Start a new analysis", detail: "A fresh page for a new website.", onClick: startFresh },
+  ];
 
   const dialog = (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75"
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: 0.2 } }}
+          exit={{ opacity: 0, transition: { duration: 0.15 } }}
           onClick={() => setOpen(false)}
         >
           <motion.div
             role="dialog"
             aria-modal="true"
             aria-labelledby="logo-menu-title"
-            className="relative w-full max-w-sm rounded-2xl bg-[#0D0D10] border border-[#27272A] p-5 shadow-2xl"
-            initial={{ y: 12, scale: 0.97 }}
+            className="relative w-full max-w-[400px] rounded-[20px] bg-[#111114] p-5 sm:p-6"
+            initial={{ y: reduce ? 0 : 12, scale: reduce ? 1 : 0.97 }}
             animate={{ y: 0, scale: 1 }}
-            exit={{ y: 8, scale: 0.97 }}
+            exit={{ y: reduce ? 0 : 8, scale: reduce ? 1 : 0.97 }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -78,45 +91,47 @@ export function LogoMenu({ note, children }: LogoMenuProps) {
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close"
-              className="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center text-[#71717A] hover:text-[#F4F4F5] hover:bg-[#17171B] cursor-pointer"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-[#8B8B94] hover:text-white hover:bg-[#1C1C21] transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center gap-3 mb-4">
-              <LoopyMascot size={44} mood="wave" />
+            <div className="flex items-center gap-3 mb-5 pr-8">
+              <LoopyMascot size={44} />
               <div>
-                <h2 id="logo-menu-title" className="text-[15px] font-semibold text-[#F4F4F5]">
+                <h2 id="logo-menu-title" className="text-[18px] leading-tight font-semibold text-[#F4F4F5]">
                   Where to next?
                 </h2>
-                <p className="text-[12.5px] text-[#A1A1AA]">Pick one and Loopy will take you there.</p>
+                <p className="mt-0.5 text-[14px] text-[#B4B4BC]">Pick one and Loopy will take you there.</p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <button type="button" onClick={goHome} className={OPTION} autoFocus>
-                <span className="w-9 h-9 rounded-lg bg-[#1F1F24] flex items-center justify-center shrink-0">
-                  <Home className="w-4 h-4 text-[#F4F4F5]" />
-                </span>
-                <span>
-                  <span className="block text-[13.5px] font-medium text-[#F4F4F5]">Go to home page</span>
-                  <span className="block text-[12px] text-[#A1A1AA] mt-0.5">
-                    {user ? "Your dashboard and past analyses." : "Back to the Loop Launch home page."}
+              {options.map((o, i) => (
+                <motion.button
+                  key={o.title}
+                  type="button"
+                  onClick={o.onClick}
+                  autoFocus={i === 0}
+                  className={OPTION}
+                  initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.24, delay: 0.06 + i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <o.icon className="w-4 h-4 text-[#B4B4BC] shrink-0" aria-hidden="true" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[15px] font-medium text-[#F4F4F5]">{o.title}</span>
+                    <span className="block text-[13px] text-[#B4B4BC] mt-0.5">{o.detail}</span>
                   </span>
-                </span>
-              </button>
-              <button type="button" onClick={startFresh} className={OPTION}>
-                <span className="w-9 h-9 rounded-lg bg-[#8B5CF6] flex items-center justify-center shrink-0">
-                  <Plus className="w-4 h-4 text-white" />
-                </span>
-                <span>
-                  <span className="block text-[13.5px] font-medium text-[#F4F4F5]">Start a new analysis</span>
-                  <span className="block text-[12px] text-[#A1A1AA] mt-0.5">A fresh page for a new website.</span>
-                </span>
-              </button>
+                  <ArrowRight
+                    className="w-4 h-4 text-[#8B8B94] shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#F4F4F5]"
+                    aria-hidden="true"
+                  />
+                </motion.button>
+              ))}
             </div>
 
-            {note && <div className="mt-3 text-[12px] text-[#A1A1AA] leading-relaxed">{note}</div>}
+            {note && <div className="mt-4 text-[13px] text-[#B4B4BC] leading-relaxed">{note}</div>}
           </motion.div>
         </motion.div>
       )}
@@ -130,7 +145,7 @@ export function LogoMenu({ note, children }: LogoMenuProps) {
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-label="Loop Launch menu"
-        className="flex items-center gap-2 rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+        className="flex items-center gap-2 rounded-lg hover:opacity-90 active:scale-[0.97] transition cursor-pointer"
       >
         {children ?? (
           <>

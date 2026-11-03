@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import GradientASCII from "@/components/ui/GradientASCII";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
+import { smoothScrollTo } from "@/lib/smooth-scroll";
 
 const ASCII_COLORS = ["#ba1ed8", "#fff6ff", "#d3a5ff", "#8e38f8"];
 
@@ -53,7 +54,8 @@ export function WaitlistHero({ signedInEmail }: WaitlistHeroProps) {
   };
 
   const scrollToExplore = () => {
-    document.getElementById("what-is-it")?.scrollIntoView({ behavior: "smooth" });
+    const section = document.getElementById("what-is-it");
+    if (section) smoothScrollTo(section);
   };
 
   const done = status === "joined" || status === "already";
