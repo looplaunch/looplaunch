@@ -1,12 +1,12 @@
 import Script from "next/script";
 
-/**
- * Google tag (gtag.js). Reads the measurement ID from NEXT_PUBLIC_GA_MEASUREMENT_ID so it's easy to
- * swap or unset per environment; renders nothing when that's not set (e.g. local dev).
- */
+/** The GA4 measurement ID. It is public (every page sends it), so it lives in code; the env var can override it. */
+const MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "G-6GQ5842PC3";
+
+/** Google tag (gtag.js). Loads only in production builds, so local development doesn't count as traffic. */
 export function GoogleAnalytics() {
-  const id = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
-  if (!id) return null;
+  if (process.env.NODE_ENV !== "production") return null;
+  const id = MEASUREMENT_ID;
 
   return (
     <>
