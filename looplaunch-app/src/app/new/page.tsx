@@ -1,12 +1,12 @@
 import { AppNav } from "@/components/app/AppNav";
 import { NewAnalysis } from "@/components/onboarding/NewAnalysis";
-import { getCurrentUser } from "@/lib/auth/supabase-server";
+import { getTokenUser } from "@/lib/auth/supabase-server";
 import { profileOf } from "@/lib/auth/profile";
 
 /** `?website=` comes from the dashboard's website field and wins over the profile's site. */
 export default async function NewAnalysisPage({ searchParams }: { searchParams: Promise<{ website?: string }> }) {
   const { website } = await searchParams;
-  const user = await getCurrentUser();
+  const user = await getTokenUser();
   const profile = user ? profileOf(user) : null;
   const fromLink = typeof website === "string" && /^https?:\/\/[^\s]+\.[^\s]+$/i.test(website) ? website : undefined;
 

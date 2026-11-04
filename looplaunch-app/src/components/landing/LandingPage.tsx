@@ -1,23 +1,19 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Figtree } from "next/font/google";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useOnboarding } from "@/lib/onboarding/context";
 import { LandingNav } from "./LandingNav";
 import { HeroSection } from "./HeroSection";
-import { WhatIsLoopLaunchSection } from "./WhatIsLoopLaunchSection";
-import { HowItWorksSection } from "./HowItWorksSection";
-import { DeepResearchSection } from "./DeepResearchSection";
-import { StrategicIntelligenceSection } from "./StrategicIntelligenceSection";
-import { StrategyOutputSection } from "./StrategyOutputSection";
-import { FinalCtaSection } from "./FinalCtaSection";
-import { LandingFooter } from "./LandingFooter";
-import { WaitlistHero, WAITLIST_INPUT_ID } from "@/components/waitlist/WaitlistHero";
+import { StepsSection } from "./StepsSection";
+import { AskSection } from "./AskSection";
+import { SwitchesSection } from "./SwitchesSection";
+import { StartClosingLine, WaitlistClosingLine } from "./ClosingLine";
+import { LandingClose } from "./LandingClose";
+import { WaitlistHero } from "@/components/waitlist/WaitlistHero";
+import { GameArena } from "@/components/waitlist/GameArena";
+import { WaitlistGameProvider, useWaitlistGame } from "@/components/waitlist/WaitlistGame";
 import { SmoothScroll } from "./SmoothScroll";
-
-// The landing page keeps its original typeface: Figtree takes over the --font-brand variable that
-// font-sans reads (the signed-in app sets it to Jost in the root layout).
-const figtree = Figtree({ subsets: ["latin"], variable: "--font-brand", display: "swap" });
+import "./landing.css";
 
 const scrollToHero = () => {
   document.getElementById("hero-section")?.scrollIntoView({ behavior: "smooth" });
@@ -33,31 +29,35 @@ export function LandingPage() {
   };
 
   return (
-    <LandingLayout hero={<HeroSection />} onNavCta={scrollToHero} onFinalCta={handleStartOnboarding} />
+    <LandingLayout
+      hero={<HeroSection />}
+      onNavCta={scrollToHero}
+      closing={<StartClosingLine onStart={handleStartOnboarding} />}
+    />
   );
 }
 
-/** The public landing page while Loop Launch is invite-only: same page, waitlist hero. */
+/** The public landing page while Loop Launch is invite-only: same page, waitlist hero. Joining opens Loopy's snake over the page (with a skip). */
 export function WaitlistLandingPage({ signedInEmail }: { signedInEmail?: string | null }) {
-  const focusWaitlist = () => {
-    const input = document.getElementById(WAITLIST_INPUT_ID);
-    if (input) {
-      input.scrollIntoView({ behavior: "smooth", block: "center" });
-      input.focus({ preventScroll: true });
-    } else {
-      scrollToHero();
-    }
-  };
+  return (
+    <WaitlistGameProvider signedInEmail={signedInEmail}>
+      <WaitlistLanding />
+    </WaitlistGameProvider>
+  );
+}
+
+function WaitlistLanding() {
+  const { arena, openGame } = useWaitlistGame();
 
   return (
     <LandingLayout
-      hero={<WaitlistHero signedInEmail={signedInEmail} />}
+      hero={<WaitlistHero />}
       navCtaLabel="Join waitlist"
-      onNavCta={focusWaitlist}
+      onNavCta={openGame}
       waitlist
-      finalCtaLabel="Join the waitlist"
-      finalCtaSubtitle="Get early access to your AI CMO. Join the waitlist and we'll let you in soon."
-      onFinalCta={focusWaitlist}
+      closing={<WaitlistClosingLine />}
+      overlay={<GameArena />}
+      inert={arena.open}
     />
   );
 }
@@ -65,56 +65,76 @@ export function WaitlistLandingPage({ signedInEmail }: { signedInEmail?: string 
 interface LandingLayoutProps {
   hero: ReactNode;
   onNavCta: () => void;
-  onFinalCta: () => void;
+  /** The closing sentence before the footer */
+  closing: ReactNode;
   navCtaLabel?: string;
-  finalCtaLabel?: string;
-  finalCtaSubtitle?: string;
   /** Invite-only page: login moves from the nav to the footer. */
   waitlist?: boolean;
+  /** Drawn over the page (the snake game); `inert` takes the page out of reach while it's open. */
+  overlay?: ReactNode;
+  inert?: boolean;
 }
 
-function LandingLayout({
-  hero,
-  onNavCta,
-  onFinalCta,
-  navCtaLabel,
-  finalCtaLabel,
-  finalCtaSubtitle,
-  waitlist = false,
-}: LandingLayoutProps) {
+function LandingLayout({ hero, onNavCta, closing, navCtaLabel, waitlist = false, overlay, inert = false }: LandingLayoutProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useRevealOnScroll(rootRef);
+
   return (
     <div
-      className={`${figtree.variable} font-sans min-h-screen flex flex-col bg-bg-primary text-text-primary selection:bg-white/10 selection:text-white`}
+      ref={rootRef}
+      className={`ll font-sans min-h-svh flex flex-col selection:bg-white/10 selection:text-white`}
     >
       {/* The slow, smooth wheel scroll asked for on the landing page */}
       <SmoothScroll />
 
-      {/* 1. Navigation */}
-      <LandingNav onGetStarted={onNavCta} ctaLabel={navCtaLabel} appLinks={!waitlist} />
+      <div className="contents" inert={inert}>
+        <LandingNav onGetStarted={onNavCta} ctaLabel={navCtaLabel} appLinks={!waitlist} />
+        <main>
+          {hero}
+          <StepsSection />
+          <AskSection />
+          <SwitchesSection />
+          {closing}
+        </main>
+        <LandingClose inviteLogin={waitlist} />
+      </div>
 
-      {/* 2 & 3. Hero (inline onboarding flow, or the waitlist) */}
-      {hero}
+      {overlay}
 
-      {/* 4. Section — What is Loop Launch? */}
-      <WhatIsLoopLaunchSection />
-
-      {/* 5. Section — How It Works */}
-      <HowItWorksSection />
-
-      {/* 6. Deep Research Section */}
-      <DeepResearchSection />
-
-      {/* 7. Strategic Intelligence Section */}
-      <StrategicIntelligenceSection />
-
-      {/* 8. Strategy Output Section */}
-      <StrategyOutputSection />
-
-      {/* 9. Final CTA */}
-      <FinalCtaSection onGetStarted={onFinalCta} ctaLabel={finalCtaLabel} subtitle={finalCtaSubtitle} />
-
-      {/* 11. Footer */}
-      <LandingFooter inviteLogin={waitlist} />
     </div>
   );
+}
+
+/** Marks each [data-reveal] element with data-in the first time it scrolls into view (landing.css animates it). */
+function useRevealOnScroll(rootRef: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    // A masked line sits below its clipping parent until it rises, so its parent is what's watched.
+    const owner = new Map<Element, Element>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          (owner.get(entry.target) ?? entry.target).setAttribute("data-in", "");
+          io.unobserve(entry.target);
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px", threshold: 0.05 }
+    );
+    const watch = () =>
+      root.querySelectorAll("[data-reveal]:not([data-in])").forEach((el) => {
+        const target = el.getAttribute("data-reveal") === "line" && el.parentElement ? el.parentElement : el;
+        owner.set(target, el);
+        io.observe(target);
+      });
+    watch();
+    // Parts that mount later (the closing line after joining) are picked up too.
+    const added = new MutationObserver(watch);
+    added.observe(root, { childList: true, subtree: true });
+    return () => {
+      io.disconnect();
+      added.disconnect();
+    };
+  }, [rootRef]);
 }

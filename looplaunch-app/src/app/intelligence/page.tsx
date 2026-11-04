@@ -14,6 +14,7 @@ import { MindMapDialog, parseMindMap } from "@/components/intelligence/MindMap";
 import { MarkdownContent } from "@/components/intelligence/MarkdownContent";
 import { IntelligenceSidebar } from "@/components/intelligence/IntelligenceSidebar";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
+import { LockedResults } from "@/components/intelligence/LockedResults";
 import { LoopyPuzzle } from "@/components/loopy/LoopyPuzzle";
 import { LoopyTip } from "@/components/loopy/LoopyTip";
 import LatticeLoader from "@/components/reactbits/LatticeLoader";
@@ -114,17 +115,23 @@ function IntelligencePageContent() {
   const user = useAuthUser();
   const claimedRef = useRef<string | null>(null);
 
-  // Signed-out visitors get their first strategy; after that, chatting needs a login (the
-  // ask API enforces this too). "intel" is the locked search intel sidebar.
+  // Signed-out visitors watch the research run, then have to log in to see the results: the
+  // status API sends them only once they're signed in (and the ask API won't answer before).
   const hasAnswer = messages.some((m) => m.role === "assistant");
-  const chatLocked = user === null && hasAnswer;
+  const chatLocked = user === null;
+  const locked = status?.locked === true;
+  const strategyPending = status?.strategyPending === true;
   const [loginOpen, setLoginOpen] = useState(false);
-  const [loginReason, setLoginReason] = useState<"chat" | "intel">("chat");
-  const askToLogIn = (reason: "chat" | "intel") => {
+  const [resultsPromptDismissed, setResultsPromptDismissed] = useState(false);
+  const [loginReason, setLoginReason] = useState<"results" | "chat" | "intel">("chat");
+  const askToLogIn = (reason: "results" | "chat" | "intel") => {
     setLoginReason(reason);
     setLoginOpen(true);
   };
-  const closeLogin = useCallback(() => setLoginOpen(false), []);
+  const closeLogin = useCallback(() => {
+    setLoginOpen(false);
+    setResultsPromptDismissed(true);
+  }, []);
 
   // Logged in with an anonymous analysis open: attach it to the account once, so it shows in History.
   useEffect(() => {
@@ -142,6 +149,15 @@ function IntelligencePageContent() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // ─── Poll pipeline status & hydrate messages ───
+  // Polling runs while the research runs, and after it while a first strategy someone already
+  // asked for (before logging in, say) is still being written.
+  const waitingForStrategy =
+    !isGathering && status?.status === "ready" && !locked && !hasAnswer && !isAsking && (strategyPending || messages.length > 0);
+  const keepPollingRef = useRef(true);
+  useEffect(() => {
+    keepPollingRef.current = isGathering || waitingForStrategy;
+  }, [isGathering, waitingForStrategy]);
+
   useEffect(() => {
     if (!sessionId) return;
 
@@ -190,16 +206,14 @@ function IntelligencePageContent() {
     poll();
 
     const interval = setInterval(() => {
-      if (isGathering) {
-        poll();
-      }
-    }, 2000);
+      if (keepPollingRef.current) poll();
+    }, 1500);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [sessionId, isGathering]);
+  }, [sessionId]);
 
   // ─── Auto-scroll to bottom of conversation ───
   useEffect(() => {
@@ -264,6 +278,13 @@ function IntelligencePageContent() {
 
       const data = await res.json();
 
+      if (data.pending || data.locked) {
+        // Already being written (or saved for after login): polling brings it in.
+        setMessages((prev) => prev.filter((m) => m.id !== userMsgId));
+        setStatus((s) => (s ? { ...s, strategyPending: true } : s));
+        return;
+      }
+
       if (data.messages && Array.isArray(data.messages)) {
         setMessages(data.messages);
         const lastMsg = data.messages[data.messages.length - 1];
@@ -298,16 +319,31 @@ function IntelligencePageContent() {
   // ─── Generate the 7-day strategy as soon as research is ready ───
   const isReady = !isGathering && status?.status === "ready";
   useEffect(() => {
-    if (!isReady || autoAskedRef.current || messages.length > 0) return;
+    if (!isReady || autoAskedRef.current || messages.length > 0 || strategyPending || user === undefined) return;
     autoAskedRef.current = true;
+    if (locked) {
+      // Signed out: the strategy is written while they log in and shown afterwards.
+      fetch("/api/intelligence/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, question: sevenDayPrompt(companyName) }),
+      }).catch(() => {});
+      return;
+    }
+    // Starting the request is this effect's job; it shows the question right away.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     handleAsk(sevenDayPrompt(companyName));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, messages.length]);
+  }, [isReady, messages.length, strategyPending, locked, user]);
+
+  // The results are ready but locked: the login pop-up opens by itself ("Not now" leaves the lock screen).
+  const resultsPromptOpen = isReady && locked && !resultsPromptDismissed;
 
   const has14Day = messages.some((m) => m.role === "user" && autoPromptLabel(m.content) === "14-day strategy");
   // One continuous wait (and one puzzle) from research through the first strategy.
-  const showInitialWait = isGathering || (isReady && !hasAnswer && (isAsking || messages.length === 0) && !error);
-  const showConversation = isReady && !showInitialWait;
+  const showInitialWait =
+    isGathering || (isReady && !locked && !hasAnswer && (isAsking || messages.length === 0 || waitingForStrategy) && !error);
+  const showConversation = isReady && !locked && !showInitialWait;
 
   // "Notify me when it's ready": a browser notification once the strategy lands, if the tab is in the background.
   const [notify, setNotify] = useState(false);
@@ -478,6 +514,15 @@ function IntelligencePageContent() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ─── Results ready, signed out: log in to see them ─── */}
+        {isReady && locked && (
+          <LockedResults
+            companyName={companyName}
+            counts={status?.searchIntel?.counts}
+            onLogIn={() => askToLogIn("results")}
+          />
+        )}
 
         {/* ─── Conversational Stream / Initial Selection ─── */}
         {showConversation && status && (
@@ -823,14 +868,22 @@ function IntelligencePageContent() {
       )}
 
       <LoginPrompt
-        open={loginOpen}
+        open={loginOpen || resultsPromptOpen}
         onClose={closeLogin}
         next={`/intelligence?session=${sessionId}`}
-        title={loginReason === "intel" ? "Log in to see the search intel" : "Log in to keep chatting"}
+        title={
+          resultsPromptOpen || loginReason === "results"
+            ? "Log in to see your results"
+            : loginReason === "intel"
+              ? "Log in to see the search intel"
+              : "Log in to keep chatting"
+        }
         description={
-          loginReason === "intel"
-            ? `See what ${possessive(companyName)} buyers ask Google, the ads running in this market, and who you're up against.`
-            : `Your 7-day strategy for ${companyName} is ready. Log in to ask Loopy follow-up questions, see the search intel, and save this analysis to your History.`
+          resultsPromptOpen || loginReason === "results"
+            ? `Your analysis of ${companyName} is ready. Log in to see your 7-day strategy and everything Loopy found. It's saved to your History too.`
+            : loginReason === "intel"
+              ? `See what ${possessive(companyName)} buyers ask Google, the ads running in this market, and who you're up against.`
+              : `Log in to ask Loopy follow-up questions about ${companyName} and save this analysis to your History.`
         }
       />
 

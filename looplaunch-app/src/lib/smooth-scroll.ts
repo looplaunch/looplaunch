@@ -21,3 +21,9 @@ export function smoothScrollTo(target: HTMLElement | "top", { center = false }: 
   if (!el) window.scrollTo({ top: 0, behavior: "smooth" });
   else el.scrollIntoView({ behavior: "smooth", block: center ? "center" : "start" });
 }
+
+/** Stops the smooth scroller while something covers the page (the snake game), and starts it again. */
+export function holdSmoothScroll(held: boolean) {
+  if (held) scroller?.stop();
+  else scroller?.start();
+}

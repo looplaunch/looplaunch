@@ -38,7 +38,8 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
     setSaving(true);
     setNote(null);
     const site = website.trim();
-    const { error } = await createSupabaseBrowserClient().auth.updateUser({
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.updateUser({
       data: {
         display_name: name.trim(),
         job_title: jobTitle.trim(),
@@ -48,6 +49,10 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
         avatar_mode: usePhoto ? "photo" : "initials",
       },
     });
+    if (!error) {
+      // Pages read the profile from the login token: a fresh token carries the new details.
+      await supabase.auth.refreshSession();
+    }
     setSaving(false);
     if (error) {
       setNote({ ok: false, text: error.message });

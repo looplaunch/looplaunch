@@ -235,7 +235,7 @@ export function HeroSection({ variant = "landing" }: HeroSectionProps) {
   };
 
   const scrollToExplore = () => {
-    const nextSection = document.getElementById("what-is-it");
+    const nextSection = document.getElementById("how-it-works");
     if (nextSection) {
       nextSection.scrollIntoView({ behavior: "smooth" });
     }

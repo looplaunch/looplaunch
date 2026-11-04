@@ -182,7 +182,7 @@ export async function generateDiagnosis(
       JSON.stringify(companyIntel, (key, value) => (key === "rawCrawlData" || key === "likelyCompetitors" ? undefined : value), 2),
       buildResearchBrief({ company: companyIntel, competitors: competitorIntel, market: marketIntel }),
       marketIntel.analysisUnavailable
-        ? "Not available for this run."
+        ? ""
         : JSON.stringify({ industryOverview, marketSize, growthTrends, keyPlayers, emergingTrends, customerBehaviors, regulations, opportunities, threats }, null, 2),
       onboarding
     );

@@ -183,10 +183,10 @@ TASK: Synthesize all gathered intelligence into a STRATEGIC DIAGNOSIS.
 ${companyIntel}
 
 ${researchBrief}
-
+${marketAnalysis ? `
 ═══ AI MARKET ANALYSIS (an earlier interpretation, not an observation) ═══
 ${marketAnalysis}
-
+` : ""}
 ═══ USER'S ONBOARDING ANSWERS ═══
 Role: ${onboarding.role || "Not specified"}
 Industry: ${onboarding.industry || "Not specified"}

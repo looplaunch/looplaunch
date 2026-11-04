@@ -12,7 +12,7 @@ import { hasSupabaseAuthConfig, supabaseAuthConfig } from "@/lib/auth/config";
 import { canUseApp } from "@/lib/auth/team";
 
 /** Pages anyone may open: the waitlist itself, login, and files for search engines and browsers. */
-const PUBLIC_PATHS = ["/", "/login", "/privacy", "/terms", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/", "/waitlist", "/login", "/privacy", "/terms", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/auth/");

@@ -522,6 +522,10 @@ export interface StatusResponse {
   messages?: ChatMessage[];
   /** Search Intel for the sidebar, once the analysis is ready */
   searchIntel?: SearchIntelView;
+  /** Signed out: the results exist but aren't sent until the visitor logs in */
+  locked?: boolean;
+  /** The first strategy is being written right now */
+  strategyPending?: boolean;
   error?: string;
 }
 

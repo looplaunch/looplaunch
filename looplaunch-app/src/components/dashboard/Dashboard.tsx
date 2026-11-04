@@ -60,7 +60,7 @@ function PanelTitle({ children, aside }: { children: React.ReactNode; aside?: Re
 
 /** Loopy's notes: tips matched to what the latest analysis is about, dealt as a deck. */
 function LoopyNote({ about, seed }: { about: string; seed: string }) {
-  return <LoopyTipsDeck tips={pickTips(about, seed, 4)} className="flex-1" />;
+  return <LoopyTipsDeck tips={pickTips(about, seed, 4)} />;
 }
 
 // ──────────────────────────────────────────────
@@ -237,20 +237,22 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
         </Link>
       </header>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {counts.map((c) => (
-          <div key={c.label} className="rounded-[20px] bg-[#111114] p-4 sm:min-h-[128px] flex flex-col">
-            <p className="text-[13px] text-[#B4B4BC]">{c.label}</p>
-            <p className="mt-1 text-[28px] leading-9 font-normal tabular-nums">
+      {/* The counts as one strip of figures, not four tiles */}
+      <dl className={`${panel} grid grid-cols-2 lg:grid-cols-4 gap-y-5 mb-4`}>
+        {counts.map((c, i) => (
+          <div key={c.label} className={`min-w-0 ${i % 2 ? "pl-5" : ""} ${i > 0 ? "lg:pl-6" : ""}`}>
+            <dt className="text-[13px] text-[#B4B4BC]">{c.label}</dt>
+            <dd className="mt-1 text-[30px] leading-9 font-semibold tracking-[-0.02em] tabular-nums">
               <RollingCount value={c.value} suffix={c.more || undefined} />
-            </p>
-            <p className="mt-auto pt-2 text-[12px] text-[#8B8B94]">{c.note}</p>
+            </dd>
+            <dd className="mt-1 text-[12px] text-[#8B8B94] truncate">{c.note}</dd>
           </div>
         ))}
-      </div>
+      </dl>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <section className={`${panel} lg:col-span-8 flex flex-col`} aria-labelledby="latest-title">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:items-start">
+        <div className="lg:col-span-8 flex flex-col gap-4">
+        <section className={`${panel} flex flex-col`} aria-labelledby="latest-title">
           <PanelTitle aside={<span className="text-[13px] text-[#8B8B94]">Updated {timeAgo(latest.updatedAt).toLowerCase()}</span>}>
             <span id="latest-title">Latest analysis</span>
           </PanelTitle>
@@ -275,7 +277,7 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
               <p className="text-[14px] leading-6 text-[#F4F4F5] line-clamp-2 mt-0.5">{latest.lastQuestion}</p>
             </div>
           )}
-          <div className="mt-auto pt-5 flex flex-wrap gap-x-5 gap-y-2">
+          <div className="pt-5 flex flex-wrap gap-x-5 gap-y-2">
             <Link href={openHref(latest)} className="inline-flex items-center gap-1.5 text-[14px] font-medium hover:text-white group">
               Open analysis
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
@@ -288,6 +290,31 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
             )}
           </div>
         </section>
+
+        <section className={`${panel} flex flex-col`} aria-labelledby="recent-title">
+          <PanelTitle>
+            <span id="recent-title">Earlier analyses</span>
+          </PanelTitle>
+          {rest.length === 0 ? (
+            <p className="rounded-[14px] bg-[#1C1C21] px-4 py-3 text-[14px] text-[#B4B4BC]">
+              Only one analysis so far. Each one you run will be listed here.
+            </p>
+          ) : (
+            <RecentAnalysesList sessions={rest.slice(0, 5)} />
+          )}
+          <div className="pt-4 flex items-center justify-between text-[13px]">
+            <span className="text-[#8B8B94] tabular-nums">
+              {sessions.length}
+              {plus} {sessions.length === 1 ? "analysis" : "analyses"} in total
+            </span>
+            <Link href="/history" className="inline-flex items-center gap-1 text-[#B4B4BC] hover:text-[#F4F4F5]">
+              View all in History
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+
+        </div>
 
         <div className="lg:col-span-4 flex flex-col gap-4">
           <section className={panel} aria-labelledby="business-title">
@@ -315,29 +342,6 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
           </section>
           <LoopyNote about={`${latest.lastQuestion || ""} ${latest.industry}`} seed={latest.id} />
         </div>
-
-        <section className={`${panel} lg:col-span-12 flex flex-col`} aria-labelledby="recent-title">
-          <PanelTitle>
-            <span id="recent-title">Earlier analyses</span>
-          </PanelTitle>
-          {rest.length === 0 ? (
-            <p className="rounded-[14px] border border-dashed border-[#2E2E35] px-4 py-3 text-[14px] text-[#B4B4BC]">
-              Only one analysis so far. Each one you run will be listed here.
-            </p>
-          ) : (
-            <RecentAnalysesList sessions={rest.slice(0, 5)} />
-          )}
-          <div className="mt-auto pt-4 flex items-center justify-between text-[13px]">
-            <span className="text-[#8B8B94] tabular-nums">
-              {sessions.length}
-              {plus} {sessions.length === 1 ? "analysis" : "analyses"} in total
-            </span>
-            <Link href="/history" className="inline-flex items-center gap-1 text-[#B4B4BC] hover:text-[#F4F4F5]">
-              View all in History
-              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-            </Link>
-          </div>
-        </section>
 
         {/* A full-width bar, so no shorter card sits beside the list */}
         <section className={`${panel} lg:col-span-12 grid lg:grid-cols-12 gap-x-4 gap-y-4 items-end`} aria-labelledby="new-title">

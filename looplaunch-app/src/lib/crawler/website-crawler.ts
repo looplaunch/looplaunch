@@ -25,7 +25,7 @@ function getCrawl4AIUrl(): string | undefined {
  * Crawl a URL using the Crawl4AI service.
  * Returns the extracted content or null if the service is unavailable.
  */
-async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
+async function crawlWithCrawl4AI(url: string, cancel?: AbortSignal): Promise<CrawledPage | null> {
   const baseUrl = getCrawl4AIUrl();
   if (!baseUrl) {
     console.log("[Crawler] CRAWL4AI_URL not set, skipping Crawl4AI");
@@ -50,7 +50,8 @@ async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
         css_selector: "body",
         verbose: false,
       }),
-      signal: AbortSignal.timeout(45000), // 45s timeout (Crawl4AI can be slow on cold start)
+      // 45s timeout (Crawl4AI can be slow on cold start), or sooner once a plain fetch was used instead
+      signal: cancel ? AbortSignal.any([AbortSignal.timeout(45000), cancel]) : AbortSignal.timeout(45000),
     });
 
     if (!response.ok) {
@@ -89,6 +90,7 @@ async function crawlWithCrawl4AI(url: string): Promise<CrawledPage | null> {
       success: true,
     };
   } catch (error) {
+    if (cancel?.aborted) return null; // a plain fetch was used instead
     const msg = error instanceof Error ? error.message : String(error);
     console.warn(`[Crawler] Crawl4AI error for ${url}: ${msg}`);
     return null;
@@ -227,15 +229,32 @@ export async function crawlUrl(url: string): Promise<CrawledPage> {
     return { url, title: "", metaDescription: "", headings: [], mainContent: "", links: [], crawledAt: new Date().toISOString(), success: false, error };
   }
 
-  // Try Crawl4AI first
-  const crawl4aiResult = await crawlWithCrawl4AI(url);
-  if (crawl4aiResult && crawl4aiResult.success) {
-    return crawl4aiResult;
-  }
+  // Both crawlers start at once. Crawl4AI runs the page's scripts, so its result is preferred, but
+  // when a plain fetch already got the page's text, Crawl4AI only gets a short head start more.
+  const cancel = new AbortController();
+  const rendered = crawlWithCrawl4AI(url, cancel.signal);
+  const fetched = crawlWithFetch(url);
+  const quick = await Promise.race([
+    rendered.then((page) => (page?.success ? page : null)),
+    fetched.then(() => null),
+  ]);
+  if (quick) return quick;
 
-  // Fallback to fetch
-  return crawlWithFetch(url);
+  const plain = await fetched;
+  if (plain.success && plain.mainContent.length >= ENOUGH_TEXT) {
+    const late = await Promise.race([rendered, new Promise<null>((r) => setTimeout(() => r(null), CRAWL4AI_GRACE_MS))]);
+    if (late?.success) return late;
+    cancel.abort();
+    return plain;
+  }
+  const full = await rendered;
+  return full?.success ? full : plain;
 }
+
+/** A fetched page with this much text is usable without waiting for Crawl4AI. */
+const ENOUGH_TEXT = 400;
+/** How long a usable fetched page waits for Crawl4AI's rendered version. */
+const CRAWL4AI_GRACE_MS = 4000;
 
 /**
  * Crawl a website and its key subpages (about, pricing, etc.).
@@ -264,39 +283,14 @@ export async function crawlWebsite(websiteUrl: string): Promise<CrawlResult> {
 
   console.log(`[Crawler] Starting website crawl: ${domain}`);
 
-  // Crawl the main page first
-  const mainPage = await crawlUrl(websiteUrl);
-
-  // Identify important subpages to crawl
-  const subpagePaths = ["/about", "/pricing", "/features", "/products", "/services"];
-  const subpageUrls = subpagePaths.map(
-    (path) => new URL(path, websiteUrl).toString()
+  // The main page and the usual key pages, all at once.
+  const subpageUrls = ["/about", "/pricing", "/features", "/products", "/services"].map((path) =>
+    new URL(path, websiteUrl).toString()
   );
-
-  // Also check links from the main page for common subpages
-  if (mainPage.success && mainPage.links.length > 0) {
-    const sameDomainLinks = mainPage.links.filter((link) => {
-      try {
-        return new URL(link).hostname === domain;
-      } catch {
-        return false;
-      }
-    });
-
-    // Add links that look like important pages
-    const importantPatterns = /\/(about|pricing|features|products|services|team|contact|blog|solutions|platform)/i;
-    for (const link of sameDomainLinks) {
-      if (importantPatterns.test(link) && !subpageUrls.includes(link)) {
-        subpageUrls.push(link);
-      }
-    }
-  }
-
-  // Crawl subpages (max 5 to stay fast)
-  const subpagesToCrawl = subpageUrls.slice(0, 5);
-  const subpageResults = await Promise.allSettled(
-    subpagesToCrawl.map((url) => crawlUrl(url))
-  );
+  const [mainPage, subpageResults] = await Promise.all([
+    crawlUrl(websiteUrl),
+    Promise.allSettled(subpageUrls.map((url) => crawlUrl(url))),
+  ]);
 
   const allPages: CrawledPage[] = [mainPage];
   for (const result of subpageResults) {

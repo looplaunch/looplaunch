@@ -246,10 +246,13 @@ export async function runResearch(
     advertisingDomains: new Set(competitorAds().map((a) => a.competitorDomain || "")),
     max: ledger.remaining("competitor_ads"),
   });
+  // Run them together: skipped entirely when discovery already found enough competitor ads.
+  const adPlan: string[] = [];
   for (const query of plan) {
     if (serpBlocked || competitorAds().length >= config.maxAds || !ledger.take("competitor_ads")) break;
-    absorb(await search(query, "competitor_ads"));
+    adPlan.push(query);
   }
+  (await Promise.all(adPlan.map((query) => search(query, "competitor_ads")))).forEach(absorb);
 
   // Re-check candidates against everything collected (no new Gemini call).
   ads = mergeAdSightings(sightings);

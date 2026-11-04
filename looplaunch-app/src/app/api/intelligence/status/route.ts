@@ -4,9 +4,9 @@
  * Returns the current pipeline status for a session.
  * Frontend polls this endpoint during the gathering phase.
  *
- * Once ready, it includes the Search Intel view, built from stored research only (no new
- * searches). Signed-out visitors get the counts but not the records, so the sidebar shows
- * it locked.
+ * Once ready, it includes the Search Intel view and the conversation. Signed-out visitors see
+ * the research progress, then only that the results are ready (with the Search Intel counts):
+ * the results themselves are sent once they log in.
  */
 
 import { NextResponse } from "next/server";
@@ -15,6 +15,7 @@ import { getSession } from "@/lib/intelligence/store";
 import { canUseSession } from "@/lib/auth/session-access";
 import { getSignedInClaims } from "@/lib/auth/supabase-server";
 import { buildSearchIntelView, validateSearchIntelView } from "@/lib/intelligence/search-intel";
+import { isStrategyPending } from "@/lib/intelligence/pending";
 import type { StatusResponse } from "@/lib/intelligence/types";
 
 export async function GET(request: Request) {
@@ -55,8 +56,10 @@ export async function GET(request: Request) {
     hasMarketIntelligence: !!session.marketIntelligence,
     hasDiagnosis: !!session.diagnosis,
     companyName: session.onboardingInput?.companyName || session.companyIntelligence?.name,
-    messages: session.messages || [],
+    messages: signedIn ? session.messages || [] : [],
     searchIntel,
+    locked: !signedIn && session.status === "ready",
+    strategyPending: isStrategyPending(session.id),
     error: session.error,
   };
 

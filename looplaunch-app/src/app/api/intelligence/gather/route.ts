@@ -6,8 +6,8 @@
  * 2. Business profile: what they sell, to whom, and where (Gemini, from the crawled pages)
  * 3. Search Intel research (src/lib/research/orchestrator.ts): competitors, competitor ads,
  *    Ad Library and buyer questions within the configured search budget, reusing cached results
- * 4. Market analysis and AI answers to the buyer questions (Gemini, from that research)
- * 5. Strategic diagnosis (Gemini, from the same research brief)
+ * 4. Market analysis, AI answers to the buyer questions and the strategic diagnosis, together
+ *    (Gemini, all from that research brief)
  * 6. Everything is stored on the session (Supabase + in-memory cache)
  *
  * Returns immediately with a sessionId (202 Accepted). Poll /api/intelligence/status.
@@ -112,12 +112,14 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     const brief = buildResearchBrief({ company: companyIntel, competitors: research.competitors, market: searchData });
 
     // Gemini answers are labelled as AI in Search Intel; Google's own answer stays in `snippet`.
-    const [marketAnalysis, answers] = await Promise.all([
+    // The diagnosis is written at the same time, from the same research brief.
+    const [marketAnalysis, answers, diagnosis] = await Promise.all([
       analyzeMarket(input, brief),
       answerBuyerQuestions(
         research.questions.map((q) => q.question),
         companyIntel
       ),
+      generateDiagnosis(companyIntel, research.competitors, { ...searchData, analysisUnavailable: true }, input),
     ]);
     // Only the analysis fields come from Gemini; it can't overwrite collected search data.
     const { industryOverview, marketSize, growthTrends, keyPlayers, emergingTrends, customerBehaviors, regulations, opportunities, threats, analysisUnavailable } =
@@ -141,9 +143,8 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     };
     await updateSession(sessionId, { marketIntelligence: marketIntel });
 
-    // ─── STAGE 5: Strategic diagnosis ───
+    // ─── STAGE 5: Strategic diagnosis (written alongside the market analysis above) ───
     await updateStatus(sessionId, "diagnosing", "Putting your diagnosis together...");
-    const diagnosis = await generateDiagnosis(companyIntel, research.competitors, marketIntel, input);
     if (diagnosis) await updateSession(sessionId, { diagnosis });
 
     // ─── DONE ───

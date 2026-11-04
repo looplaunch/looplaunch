@@ -1,52 +1,21 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import GradientASCII from "@/components/ui/GradientASCII";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
 import { smoothScrollTo } from "@/lib/smooth-scroll";
+import { formatTime } from "@/lib/waitlist/snake";
+import { useWaitlistGame } from "./WaitlistGame";
 
 const ASCII_COLORS = ["#ba1ed8", "#fff6ff", "#d3a5ff", "#8e38f8"];
 
-/** The email box; the nav and final call-to-action buttons scroll here and focus it. */
-export const WAITLIST_INPUT_ID = "waitlist-email";
-
-interface WaitlistHeroProps {
-  /** Set when someone is signed in but not on the team allowlist yet. */
-  signedInEmail?: string | null;
-}
-
-type Status = "idle" | "sending" | "joined" | "already";
-
 /** Hero of the public landing page while Loop Launch is invite-only: join the waitlist. */
-export function WaitlistHero({ signedInEmail }: WaitlistHeroProps) {
+export function WaitlistHero() {
   const router = useRouter();
-  const [email, setEmail] = useState(signedInEmail ?? "");
-  const [honeypot, setHoneypot] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [error, setError] = useState("");
-
-  const join = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (status === "sending") return;
-    setStatus("sending");
-    setError("");
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, company: honeypot }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; alreadyJoined?: boolean };
-      if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
-      setStatus(data.alreadyJoined ? "already" : "joined");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      setStatus("idle");
-    }
-  };
+  const { me, arena, signedInEmail, openGame } = useWaitlistGame();
+  const unclaimed = !arena.open ? arena.run : null;
 
   const signOut = async () => {
     await createSupabaseBrowserClient().auth.signOut();
@@ -54,11 +23,9 @@ export function WaitlistHero({ signedInEmail }: WaitlistHeroProps) {
   };
 
   const scrollToExplore = () => {
-    const section = document.getElementById("what-is-it");
+    const section = document.getElementById("how-it-works");
     if (section) smoothScrollTo(section);
   };
-
-  const done = status === "joined" || status === "already";
 
   return (
     <section
@@ -102,9 +69,9 @@ export function WaitlistHero({ signedInEmail }: WaitlistHeroProps) {
           this week. Join the waitlist for early access.
         </p>
 
-        <div className="mt-9 w-full max-w-md">
+        <div className="mt-9 w-full max-w-lg">
           <AnimatePresence mode="wait">
-            {done ? (
+            {me ? (
               <motion.div
                 key="done"
                 initial={{ opacity: 0, scale: 0.96 }}
@@ -113,58 +80,49 @@ export function WaitlistHero({ signedInEmail }: WaitlistHeroProps) {
               >
                 <LoopyMascot size={56} mood="wave" />
                 <div>
-                  <p className="font-semibold">
-                    {status === "already" ? "You're already on the list!" : "You're on the list!"}
-                  </p>
+                  <p className="font-semibold">You&apos;re on the list, {me.firstName}!</p>
                   <p className="mt-0.5 text-sm text-text-secondary">
-                    We&apos;ll email <span className="text-text-primary">{email.trim().toLowerCase()}</span> when your
-                    access is ready.
+                    We&apos;ll email <span className="text-text-primary">{me.email}</span> when your access is ready.
                   </p>
                 </div>
               </motion.div>
-            ) : (
-              <motion.form
-                key="form"
-                onSubmit={join}
-                exit={{ opacity: 0, y: -8 }}
-                className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/60 p-2 backdrop-blur-md sm:flex-row"
+            ) : unclaimed ? (
+              <motion.div
+                key="unclaimed"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/60 p-4 text-left backdrop-blur-md"
               >
-                <label htmlFor={WAITLIST_INPUT_ID} className="sr-only">
-                  Email address
-                </label>
-                <input
-                  id={WAITLIST_INPUT_ID}
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="you@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="min-w-0 flex-1 rounded-xl bg-transparent px-4 py-3 text-base text-text-primary outline-none placeholder:text-text-placeholder"
-                />
-                {/* Honeypot: hidden from people, bots fill it in */}
-                <input
-                  type="text"
-                  name="company"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  aria-hidden="true"
-                  value={honeypot}
-                  onChange={(e) => setHoneypot(e.target.value)}
-                  className="absolute -left-[9999px] h-0 w-0 opacity-0"
-                />
+                <p className="text-sm text-text-secondary">
+                  You finished in{" "}
+                  <span className="font-semibold tabular-nums text-text-primary">{formatTime(unclaimed.timeMs)}</span>.
+                  Your spot isn&apos;t saved yet.
+                </p>
                 <button
-                  type="submit"
-                  disabled={status === "sending"}
-                  className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-60"
+                  type="button"
+                  onClick={openGame}
+                  className="shrink-0 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"
                 >
-                  {status === "sending" ? "Joining…" : "Join the waitlist"}
+                  Claim it
                 </button>
-              </motion.form>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="join"
+                exit={{ opacity: 0, y: -8 }}
+                className="mx-auto w-full max-w-md rounded-2xl border border-white/10 bg-black/60 p-2 backdrop-blur-md"
+              >
+                <button
+                  type="button"
+                  onClick={openGame}
+                  className="w-full rounded-xl bg-white px-5 py-3.5 text-sm font-semibold text-black transition hover:bg-white/90 active:scale-[0.99]"
+                >
+                  Join the waitlist
+                </button>
+              </motion.div>
             )}
           </AnimatePresence>
-          {error && <p className="mt-3 text-sm text-error">{error}</p>}
-          {signedInEmail && !done && (
+          {signedInEmail && !me && (
             <p className="mt-4 text-sm text-text-secondary">
               You&apos;re signed in as {signedInEmail}, which doesn&apos;t have early access yet.{" "}
               <button type="button" onClick={signOut} className="underline underline-offset-2 hover:text-text-primary">

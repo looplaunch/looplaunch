@@ -16,7 +16,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      updated="October 29, 2026"
+      updated="November 4, 2026"
       intro={
         <p>
           Loop Launch (&ldquo;we&rdquo;, &ldquo;us&rdquo;) runs looplaunch.co, an AI marketing strategist for businesses.
@@ -27,8 +27,10 @@ export default function PrivacyPage() {
       <LegalSection title="1. What we collect">
         <ul>
           <li>
-            <strong>Waitlist.</strong> If you join the waitlist: your email address, the page you joined from, your
-            browser&apos;s user agent, and when you joined.
+            <strong>Waitlist.</strong> If you join the waitlist: your email address, your first name, the page you joined
+            from, your browser&apos;s user agent, when you joined and when you agreed to hear from us. If you play the snake
+            game on the waitlist page, also your best time. Your first name and best time are shown publicly on the
+            game&apos;s leaderboard; your email never is.
           </li>
           <li>
             <strong>Your account.</strong> Your email address and, if you set one, your password, which our authentication
@@ -92,8 +94,8 @@ export default function PrivacyPage() {
             account permanently deletes your analyses, chats and profile.
           </li>
           <li>
-            Email <Email /> to get a copy of your data, correct it, remove your waitlist entry, or ask anything about your
-            privacy. Depending on where you live, laws such as the GDPR may give you further rights, and we&apos;ll honor them.
+            Email <Email /> to get a copy of your data, correct it, remove your waitlist entry or take your name off the
+            leaderboard, or ask anything about your privacy. Depending on where you live, laws such as the GDPR may give you further rights, and we&apos;ll honor them.
           </li>
         </ul>
       </LegalSection>

@@ -4,13 +4,15 @@
  * Strategic question-answering endpoint.
  * Uses stored intelligence to answer the user's marketing strategy questions.
  *
- * Requires a valid sessionId with status "ready". Signed-out visitors get one answer
- * (their 7-day strategy); after that they have to log in to keep chatting.
+ * Requires a valid sessionId with status "ready". For a signed-out visitor the first answer
+ * (their 7-day strategy) is written and saved but not sent: they see it once they log in.
+ * Anything after that needs a login.
  */
 
 import { NextResponse } from "next/server";
 import { rejectIfNoAccess } from "@/lib/auth/team-guard";
 import { getSession, addMessageToSession } from "@/lib/intelligence/store";
+import { claimStrategy, releaseStrategy } from "@/lib/intelligence/pending";
 import { canUseSession } from "@/lib/auth/session-access";
 import { getSignedInClaims } from "@/lib/auth/supabase-server";
 import { answerQuestion } from "@/lib/ai/gemini";
@@ -65,10 +67,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Signed-out visitors get their first answer only. Counting replies (not questions)
+    // Signed-out visitors may only start their first answer. Counting replies (not questions)
     // still lets them retry a first strategy that failed.
     const hasReply = session.messages?.some((m) => m.role === "assistant");
-    if (hasReply && !(await getSignedInClaims())) {
+    const signedIn = Boolean(await getSignedInClaims());
+    if (hasReply && !signedIn) {
       return NextResponse.json(
         { error: "Log in to keep chatting with Loopy.", loginRequired: true },
         { status: 401 }
@@ -95,95 +98,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Capture conversation history before this turn
-    const priorHistory: ChatMessage[] = session.messages ? [...session.messages] : [];
-
-    // ─── STEP 1: The user's message (saved only once there's an answer, so a failed try leaves no orphan) ───
-    const userMessage: ChatMessage = {
-      id: `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      role: "user",
-      content: question,
-      timestamp: new Date().toISOString(),
-    };
-
-    // ─── STEP 2: Query Understanding & Intent Classification ───
-    const analysis = analyzeUserQuery(
-      question,
-      priorHistory,
-      session.companyIntelligence.name
-    );
-    console.log(`[QUERY UNDERSTANDING] Intent: ${analysis.intent} | Needs Search: ${analysis.needsWebResearch}`);
-    if (analysis.resolvedReference) {
-      console.log(`[QUERY UNDERSTANDING] Resolved Reference: ${analysis.resolvedReference}`);
+    // The first strategy is written once: a second request while it's being written just waits for it.
+    const first = !hasReply;
+    if (first && !claimStrategy(sessionId)) {
+      return NextResponse.json({ pending: true }, { status: 202 });
     }
-
-    // ─── STEP 3: Selective Web Research (Only when factual search is required) ───
-    let researchResults: TavilySearchResult[] = [];
-    let researchStatus: "success" | "no_results" | "failed" | "unconfigured" = "unconfigured";
-
-    if (analysis.needsWebResearch && analysis.searchQuery) {
-      const research = await researchQuestion(
-        analysis.searchQuery,
-        session.companyIntelligence?.industry
-      );
-      researchResults = research.results;
-      researchStatus = research.status;
-    }
-
-    // ─── STEP 3.5: Retrieve Loop Launch Framework Knowledge (RAG) ───
-    const framework = await retrieveFrameworkContext(
-      question,
-      session.companyIntelligence?.industry
-    );
-
-    // ─── STEP 4: Conversational Strategic Reasoning ───
-    let answer;
     try {
-      answer = await answerQuestion(
-        question,
-        session.companyIntelligence,
-        session.competitorIntelligence || [],
-        session.marketIntelligence,
-        session.diagnosis ?? null,
-        researchResults,
-        researchStatus,
-        priorHistory,
-        session.conversationSummary,
-        analysis,
-        framework.formattedContext,
-        session.onboardingInput
-      );
-    } catch {
-      // No made-up fallback answer: say so, and let the user try again.
-      return NextResponse.json(
-        { error: "Loopy couldn't answer right now (the AI service is busy). Please try again in a moment.", retryable: true },
-        { status: 503 }
-      );
+      return await answerAndSave(session, sessionId, question, signedIn);
+    } finally {
+      if (first) releaseStrategy(sessionId);
     }
-    await addMessageToSession(sessionId, userMessage);
-
-    // ─── STEP 5: Add Assistant Response to Persistent History ───
-    const assistantMessage: ChatMessage = {
-      id: `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      role: "assistant",
-      content: answer.answer,
-      timestamp: new Date().toISOString(),
-      evidence: answer.evidence,
-      sources: answer.sources,
-      confidence: answer.confidence,
-      followUpQuestions: answer.followUpQuestions,
-      queryIntent: analysis.intent,
-      researchStatus: answer.researchStatus,
-    };
-    await addMessageToSession(sessionId, assistantMessage);
-
-    console.log(`[PIPELINE] Conversational answer saved for session: ${sessionId}\n`);
-
-    const response: AskResponse = {
-      answer,
-      messages: session.messages,
-    };
-    return NextResponse.json(response);
   } catch (error) {
     console.error("[API] /intelligence/ask error:", error);
     return NextResponse.json(
@@ -191,4 +115,109 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+async function answerAndSave(
+  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  sessionId: string,
+  question: string,
+  signedIn: boolean
+) {
+  // Checked by the caller already; repeated so TypeScript knows both are there.
+  if (!session.companyIntelligence || !session.marketIntelligence) {
+    return NextResponse.json({ error: "Intelligence data is incomplete. Please re-run the gathering pipeline." }, { status: 500 });
+  }
+
+  // Capture conversation history before this turn
+  const priorHistory: ChatMessage[] = session.messages ? [...session.messages] : [];
+
+  // ─── STEP 1: The user's message (saved only once there's an answer, so a failed try leaves no orphan) ───
+  const userMessage: ChatMessage = {
+    id: `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    role: "user",
+    content: question,
+    timestamp: new Date().toISOString(),
+  };
+
+  // ─── STEP 2: Query Understanding & Intent Classification ───
+  const analysis = analyzeUserQuery(
+    question,
+    priorHistory,
+    session.companyIntelligence.name
+  );
+  console.log(`[QUERY UNDERSTANDING] Intent: ${analysis.intent} | Needs Search: ${analysis.needsWebResearch}`);
+  if (analysis.resolvedReference) {
+    console.log(`[QUERY UNDERSTANDING] Resolved Reference: ${analysis.resolvedReference}`);
+  }
+
+  // ─── STEP 3: Selective Web Research (Only when factual search is required) ───
+  let researchResults: TavilySearchResult[] = [];
+  let researchStatus: "success" | "no_results" | "failed" | "unconfigured" = "unconfigured";
+
+  if (analysis.needsWebResearch && analysis.searchQuery) {
+    const research = await researchQuestion(
+      analysis.searchQuery,
+      session.companyIntelligence?.industry
+    );
+    researchResults = research.results;
+    researchStatus = research.status;
+  }
+
+  // ─── STEP 3.5: Retrieve Loop Launch Framework Knowledge (RAG) ───
+  const framework = await retrieveFrameworkContext(
+    question,
+    session.companyIntelligence?.industry
+  );
+
+  // ─── STEP 4: Conversational Strategic Reasoning ───
+  let answer;
+  try {
+    answer = await answerQuestion(
+      question,
+      session.companyIntelligence,
+      session.competitorIntelligence || [],
+      session.marketIntelligence,
+      session.diagnosis ?? null,
+      researchResults,
+      researchStatus,
+      priorHistory,
+      session.conversationSummary,
+      analysis,
+      framework.formattedContext,
+      session.onboardingInput
+    );
+  } catch {
+    // No made-up fallback answer: say so, and let the user try again.
+    return NextResponse.json(
+      { error: "Loopy couldn't answer right now (the AI service is busy). Please try again in a moment.", retryable: true },
+      { status: 503 }
+    );
+  }
+  await addMessageToSession(sessionId, userMessage);
+
+  // ─── STEP 5: Add Assistant Response to Persistent History ───
+  const assistantMessage: ChatMessage = {
+    id: `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    role: "assistant",
+    content: answer.answer,
+    timestamp: new Date().toISOString(),
+    evidence: answer.evidence,
+    sources: answer.sources,
+    confidence: answer.confidence,
+    followUpQuestions: answer.followUpQuestions,
+    queryIntent: analysis.intent,
+    researchStatus: answer.researchStatus,
+  };
+  await addMessageToSession(sessionId, assistantMessage);
+
+  console.log(`[PIPELINE] Conversational answer saved for session: ${sessionId}\n`);
+
+  // Signed out: saved for after they log in, but not sent.
+  if (!signedIn) return NextResponse.json({ locked: true });
+
+  const response: AskResponse = {
+    answer,
+    messages: session.messages,
+  };
+  return NextResponse.json(response);
 }
