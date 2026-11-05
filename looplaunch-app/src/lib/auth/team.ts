@@ -1,7 +1,7 @@
 /**
- * Who can use the app. While the waitlist is on (the default), only the team below sees the
- * real app and everyone else sees the waitlist. Set WAITLIST_MODE=off to open the app to
- * everyone; signed-out visitors then get one free strategy before they have to log in.
+ * Who can use the app. By default the app is open to everyone; signed-out visitors get one free
+ * strategy before they have to log in. Set WAITLIST_MODE=on to bring the waitlist back: only the
+ * team below then sees the real app and everyone else sees the waitlist.
  *
  * Set TEAM_EMAILS (comma-separated) in the environment to change the team without
  * a code change. Without it, the founders' emails below are used.
@@ -20,9 +20,9 @@ export function isTeamEmail(email: string | null | undefined): boolean {
   return Boolean(email) && teamEmails().has(email!.toLowerCase());
 }
 
-/** True unless WAITLIST_MODE=off. */
+/** False unless WAITLIST_MODE=on. */
 export function isWaitlistOn(): boolean {
-  return process.env.WAITLIST_MODE?.trim().toLowerCase() !== "off";
+  return process.env.WAITLIST_MODE?.trim().toLowerCase() === "on";
 }
 
 /** May this person use the app? `null` means signed out. Everyone may once the waitlist is off. */
