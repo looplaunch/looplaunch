@@ -9,7 +9,7 @@ import { smoothScrollTo } from "@/lib/smooth-scroll";
 import { formatTime } from "@/lib/waitlist/snake";
 import { useWaitlistGame } from "./WaitlistGame";
 
-const ASCII_COLORS = ["#ba1ed8", "#fff6ff", "#d3a5ff", "#8e38f8"];
+const ASCII_COLORS = ["#ba1ed8", "#9333ea", "#8b5cf6", "#8e38f8"];
 
 /** Hero of the public landing page while Loop Launch is invite-only: join the waitlist. */
 export function WaitlistHero() {
