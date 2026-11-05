@@ -28,6 +28,7 @@ import { LoginPrompt } from "@/components/auth/LoginPrompt";
 import { LogoMenu } from "@/components/brand/LogoMenu";
 import { PRIMARY_INLINE, SECONDARY_INLINE } from "@/components/ui/fields";
 import { possessive } from "@/lib/intelligence/summary";
+import { APP_HEADER_STYLE, PageTransition } from "@/components/app/PageTransition";
 import { useAuthUser } from "@/lib/auth/use-auth-user";
 
 // ──────────────────────────────────────────────
@@ -226,6 +227,8 @@ function IntelligencePageContent() {
     const target = e.target;
     target.style.height = "auto";
     target.style.height = `${Math.min(target.scrollHeight, 180)}px`;
+    // Only scroll once the text hits the cap; below it a sub-pixel overflow shows a stray scrollbar
+    target.style.overflowY = target.scrollHeight > 180 ? "auto" : "hidden";
   };
 
   // ─── Send Question ───
@@ -252,6 +255,7 @@ function IntelligencePageContent() {
 
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
+      inputRef.current.style.overflowY = "hidden";
     }
 
     try {
@@ -340,9 +344,13 @@ function IntelligencePageContent() {
   const resultsPromptOpen = isReady && locked && !resultsPromptDismissed;
 
   const has14Day = messages.some((m) => m.role === "user" && autoPromptLabel(m.content) === "14-day strategy");
+  // Nothing about the analysis is known until the first status answers: show a quiet loader, not
+  // the research wait screen (a finished analysis would flash "Researching Company" first).
+  const loaded = status !== null || Boolean(error);
   // One continuous wait (and one puzzle) from research through the first strategy.
   const showInitialWait =
-    isGathering || (isReady && !locked && !hasAnswer && (isAsking || messages.length === 0 || waitingForStrategy) && !error);
+    loaded &&
+    (isGathering || (isReady && !locked && !hasAnswer && (isAsking || messages.length === 0 || waitingForStrategy) && !error));
   const showConversation = isReady && !locked && !showInitialWait;
 
   // "Notify me when it's ready": a browser notification once the strategy lands, if the tab is in the background.
@@ -415,9 +423,10 @@ function IntelligencePageContent() {
 
   return (
     <MotionConfig reducedMotion="user">
+    <PageTransition>
     <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex flex-col font-sans selection:bg-[#8B5CF6]/20 selection:text-[#F4F4F5]">
       {/* ─── Header ─── */}
-      <header className="sticky top-0 z-40 h-14 bg-[#09090B] border-b border-[#1C1C21]">
+      <header className="sticky top-0 z-40 h-14 bg-[#09090B] border-b border-[#1C1C21]" style={APP_HEADER_STYLE}>
         <div className="h-full mx-auto max-w-[1148px] px-4 sm:px-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <LogoMenu
@@ -436,10 +445,16 @@ function IntelligencePageContent() {
               ) : undefined
             }
           />
-          <span className="text-[14px] text-[#3F3F48]" aria-hidden="true">
-            /
-          </span>
-          <span className="text-[14px] font-medium text-[#F4F4F5] truncate max-w-[200px] sm:max-w-[320px]">{companyName}</span>
+          {loaded && (
+            <>
+              <span className="ll-swap text-[14px] text-[#3F3F48]" aria-hidden="true">
+                /
+              </span>
+              <span key={companyName} className="ll-swap text-[14px] font-medium text-[#F4F4F5] truncate max-w-[200px] sm:max-w-[320px]">
+                {companyName}
+              </span>
+            </>
+          )}
         </div>
 
         {/* While anything is running, say what; when it's done the header stays quiet */}
@@ -447,9 +462,14 @@ function IntelligencePageContent() {
           {(showInitialWait || (status && status.status !== "ready" && status.status !== "error")) && (
             <div className="flex items-center gap-2 text-[13px] text-[#B4B4BC]">
               <span className="w-3.5 h-3.5 border-2 border-[#B4B4BC] border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
-              <span className="hidden sm:inline">
-                {isReady ? "Writing your 7-day strategy" : status ? STAGE_LABELS[status.status] : "Getting started"}
-              </span>
+              {(() => {
+                const label = isReady ? "Writing your 7-day strategy" : status ? STAGE_LABELS[status.status] : "Getting started";
+                return (
+                  <span key={label} className="ll-swap hidden sm:inline-block">
+                    {label}
+                  </span>
+                );
+              })()}
               <span className="sm:hidden">Working</span>
             </div>
           )}
@@ -458,14 +478,23 @@ function IntelligencePageContent() {
         </div>
       </header>
 
-      {/* ─── Main Content Container ─── */}
-      <main className="flex-1 flex flex-col w-full max-w-[1148px] mx-auto px-4 sm:px-6">
-        {/* ─── Pipeline Gathering State ─── (no exit animation: a fading wait screen would throw off the scroll to the answer) */}
-        <AnimatePresence>
+      {/* ─── Main Content Container ─── (each state rises in as it lands: .ll-page) */}
+      <main className="ll-page relative flex-1 flex flex-col w-full max-w-[1148px] mx-auto px-4 sm:px-6">
+        {!loaded && (
+          // Only shows if the first status takes a moment; a quick answer goes straight to the right screen.
+          <div className="my-auto flex justify-center py-24 text-[#B4B4BC]" style={{ animationDelay: "0.35s" }}>
+            <LatticeLoader label="Opening your analysis" pattern="orbit" fontSize={14} />
+          </div>
+        )}
+
+        {/* ─── Pipeline Gathering State ─── (popLayout: the leaving wait screen fades without pushing the answer down) */}
+        <AnimatePresence mode="popLayout">
           {showInitialWait && (
             <motion.div
+              key="wait"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, transition: { duration: 0.25 } }}
               className="pt-12 sm:pt-16 pb-20 flex flex-col items-center text-center my-auto"
             >
               <h1 className="text-[26px] sm:text-[30px] leading-tight font-semibold tracking-[-0.02em] [text-wrap:balance]">
@@ -490,7 +519,14 @@ function IntelligencePageContent() {
               <div className="w-full max-w-xl rounded-[20px] bg-[#111114] p-5 text-left">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <p className="text-[14px] text-[#F4F4F5] min-w-0 flex-1" aria-live="polite">
-                    {isReady ? "Research done. Writing your 7-day strategy…" : status?.statusMessage || "Getting started…"}
+                    {(() => {
+                      const line = isReady ? "Research done. Writing your 7-day strategy…" : status?.statusMessage || "Getting started…";
+                      return (
+                        <span key={line} className="ll-swap block">
+                          {line}
+                        </span>
+                      );
+                    })()}
                   </p>
                   {/* React Bits BellToggle: rings, then unfurls into "Notifying you" */}
                   <BellToggle
@@ -715,7 +751,8 @@ function IntelligencePageContent() {
                                     key={fi}
                                     onClick={() => handleAsk(fq.prompt)}
                                     disabled={isAsking}
-                                    className={`text-[13px] min-h-9 px-3.5 py-1.5 rounded-full active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer text-left ${
+                                    style={{ "--d": `${0.2 + fi * 0.05}s` } as React.CSSProperties}
+                                    className={`ll-rise text-[13px] min-h-9 px-3.5 py-1.5 rounded-full active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer text-left ${
                                       fq.primary
                                         ? "bg-[#F4F4F5] text-[#09090B] font-semibold hover:bg-white"
                                         : "bg-[#1C1C21] hover:bg-[#232329] text-[#D4D4D8] hover:text-[#F4F4F5]"
@@ -790,7 +827,7 @@ function IntelligencePageContent() {
 
       {/* ─── Sticky Bottom Question Input Bar ─── */}
       {showConversation && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#09090B] border-t border-[#1C1C21] px-4 py-3">
+        <div className="ll-bar-in fixed bottom-0 left-0 right-0 z-30 bg-[#09090B] border-t border-[#1C1C21] px-4 py-3">
           <div className="max-w-3xl mx-auto w-full">
             {error && (
               <div role="alert" className="mb-2 pl-3.5 pr-1.5 py-1.5 rounded-xl bg-[#1C1C21] text-[13px] text-[#F87171] flex items-center justify-between gap-2">
@@ -840,16 +877,18 @@ function IntelligencePageContent() {
                     aria-label={`Ask Loopy about ${companyName}`}
                     placeholder="Ask Loopy about this analysis…"
                     disabled={isAsking}
-                    className="w-full bg-transparent text-[#F4F4F5] text-[15px] placeholder:text-[#8B8B94] px-4 py-3 pr-14 resize-none focus:outline-none min-h-[48px] max-h-[180px] leading-relaxed"
+                    className="w-full bg-transparent text-[#F4F4F5] text-[15px] placeholder:text-[#8B8B94] px-4 py-3 pr-14 resize-none overflow-y-hidden focus:outline-none min-h-[48px] max-h-[180px] leading-relaxed"
                   />
 
                   {/* React Bits SlingButton: tap to send, or pull it back like a slingshot and let go */}
-                  <span className="absolute right-1.5 bottom-1">
+                  <span className="absolute right-1 bottom-1 flex">
                     <SlingButton
                       onSend={() => handleAsk()}
                       disabled={!question.trim() || isAsking}
                       ariaLabel="Send"
                       size={40}
+                      gap={0}
+                      strokeWidth={2}
                       padColor="#F4F4F5"
                       iconColor="#09090B"
                       accentColor="#8B5CF6"
@@ -896,6 +935,7 @@ function IntelligencePageContent() {
         />
       )}
     </div>
+    </PageTransition>
     </MotionConfig>
   );
 }

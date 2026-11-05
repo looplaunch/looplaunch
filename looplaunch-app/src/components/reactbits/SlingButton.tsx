@@ -25,6 +25,7 @@ export interface SlingButtonProps {
   bandColor?: string;
   size?: number;
   strokeWidth?: number;
+  gap?: number;
   armAt?: number;
   maxPull?: number;
   launchSpeed?: number;
@@ -78,6 +79,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
   bandColor = '#52525b',
   size = 56,
   strokeWidth = 3,
+  gap = GAP,
   armAt = 48,
   maxPull = 160,
   launchSpeed = 2600,
@@ -94,7 +96,7 @@ const SlingButton: React.FC<SlingButtonProps> = ({
   const reduce = useReducedMotion();
   const R = maxPull;
   const ARM = Math.min(armAt, 0.8 * R);
-  const wellR = size / 2 + GAP + strokeWidth;
+  const wellR = size / 2 + gap + strokeWidth;
   const padR = size / 2 - strokeWidth / 2;
   const arcR = wellR;
   const H = wellR + strokeWidth + 2;

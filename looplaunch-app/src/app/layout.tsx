@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Figtree } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
 import { getSiteUrl, siteConfig } from "@/lib/seo";
 import { Toaster } from "@/components/ui/Toaster";
+import { NavProgress } from "@/components/app/NavProgress";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import "./globals.css";
 
@@ -128,7 +130,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${figtree.variable} ${GeistMono.variable} h-full antialiased`}>
+    // data-scroll-behavior: Next turns the smooth scrolling off while it jumps to the top of a new page.
+    <html lang="en" data-scroll-behavior="smooth" className={`${figtree.variable} ${GeistMono.variable} h-full antialiased`}>
       <head>
         <script
           type="application/ld+json"
@@ -137,6 +140,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <GoogleAnalytics />
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
         {children}
         <Toaster />
       </body>

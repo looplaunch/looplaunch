@@ -1,11 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { FIELD, LABEL, PRIMARY, SECONDARY, TEXT_LINK } from "@/components/ui/fields";
 import { OtpInput } from "@/components/auth/OtpInput";
+import { SuccessTick } from "@/components/auth/SuccessTick";
 import RubberSegment from "@/components/reactbits/RubberSegment";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
@@ -13,8 +15,8 @@ import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
 import { startGoogleSignIn } from "@/lib/auth/google";
 
 type Mode = "signin" | "signup";
-/** form: log in / sign up. code: confirm a new account. forgot: ask for a reset link. sent: check your email. */
-type Step = "form" | "code" | "forgot" | "sent";
+/** form: log in / sign up. code: confirm a new account. forgot: ask for a reset link. sent: check your email. done: signed in, on the way into the app. */
+type Step = "form" | "code" | "forgot" | "sent" | "done";
 
 interface LoginFormProps {
   /** Where to go after logging in (same-site path). */
@@ -27,6 +29,9 @@ const FAILED_MESSAGES = {
   auth: "Sign-in didn't finish. Please try again.",
   reset: "That reset link didn't work. It may have expired or been opened in another browser. Ask for a new one below.",
 };
+
+/** For the login form's rows: each rises in a beat after the one above (globals.css .ll-rise). */
+const rise = (i: number) => ({ className: "ll-rise", style: { "--d": `${0.22 + i * 0.05}s` } as CSSProperties });
 
 const WRONG_PASSWORD =
   "Email or password is wrong. Signed up with Google? Use Continue with Google, or tap Forgot password to set a password.";
@@ -42,19 +47,32 @@ export function LoginForm({ next, failed }: LoginFormProps) {
   const [openingGoogle, setOpeningGoogle] = useState(false);
   const [error, setError] = useState(failed ? FAILED_MESSAGES[failed] : "");
   const [info, setInfo] = useState("");
+  const [verified, setVerified] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const emailId = useId();
   const passwordId = useId();
-
-  const finish = () => {
-    router.replace(next);
-    router.refresh();
-  };
 
   const goTo = (target: Step) => {
     setStep(target);
     setCode("");
     setError("");
     setInfo("");
+  };
+
+  /** Signed in: show the tick, then fade the login page out into the app. */
+  const finish = () => {
+    router.prefetch(next);
+    goTo("done");
+  };
+
+  const enterApp = () => {
+    setLeaving(true);
+    // The app's header and main play an arrival animation while this attribute is set (globals.css).
+    const root = document.documentElement;
+    root.dataset.arriving = "";
+    window.setTimeout(() => delete root.dataset.arriving, 3000);
+    router.replace(next);
+    router.refresh();
   };
 
   const signInWithGoogle = async () => {
@@ -111,13 +129,13 @@ export function LoginForm({ next, failed }: LoginFormProps) {
     setInfo(`We sent a 6-digit code to ${email}.`);
   };
 
-  const verifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verifyCode = async (token: string) => {
+    if (busy || verified || token.length !== 6) return;
     setError("");
     setBusy(true);
     const { error } = await createSupabaseBrowserClient().auth.verifyOtp({
       email,
-      token: code.trim(),
+      token: token.trim(),
       type: "signup",
     });
     if (error) {
@@ -125,7 +143,16 @@ export function LoginForm({ next, failed }: LoginFormProps) {
       setError("That code didn't work. Check it, or send a new one.");
       return;
     }
-    finish();
+    // Let the slots merge into the green bar before the big tick takes over.
+    setVerified(true);
+    router.prefetch(next);
+    window.setTimeout(() => goTo("done"), 650);
+  };
+
+  const changeCode = (value: string) => {
+    setCode(value);
+    // The slots empty themselves after a wrong code; keep the message until they type again.
+    if (value && error) setError("");
   };
 
   const resendCode = async () => {
@@ -165,6 +192,7 @@ export function LoginForm({ next, failed }: LoginFormProps) {
     code: ["Check your email", "Enter the 6-digit code we emailed you."],
     forgot: ["Reset your password", "Enter your email and we'll send you a link to reset it."],
     sent: ["Check your email", `If ${email} has an account, we sent it a reset link. Open it in this browser to choose a new password.`],
+    done: ["You're in", "Opening your workspace…"],
   };
 
   return (
@@ -179,17 +207,20 @@ export function LoginForm({ next, failed }: LoginFormProps) {
       >
       {step === "form" && (
         <>
-          <button type="button" onClick={signInWithGoogle} disabled={busy} className={SECONDARY}>
-            <GoogleIcon />
-            {openingGoogle ? "Opening Google…" : "Continue with Google"}
-          </button>
+          <div {...rise(0)}>
+            <button type="button" onClick={signInWithGoogle} disabled={busy} className={SECONDARY}>
+              <GoogleIcon />
+              {openingGoogle ? "Opening Google…" : "Continue with Google"}
+            </button>
+          </div>
 
-          <div className="my-6 flex items-center gap-3 text-[13px] text-[#8B8B94]">
+          <div {...rise(1)} className="ll-rise my-6 flex items-center gap-3 text-[13px] text-[#8B8B94]">
             <span className="h-px flex-1 bg-[#26262C]" aria-hidden="true" />
             or use your email
             <span className="h-px flex-1 bg-[#26262C]" aria-hidden="true" />
           </div>
 
+          <div {...rise(2)}>
           <RubberSegment
             items={[
               { value: "signin", label: "Log in" },
@@ -210,9 +241,10 @@ export function LoginForm({ next, failed }: LoginFormProps) {
             activeTextColor="#F4F4F5"
             className="w-full mb-5"
           />
+          </div>
 
           <form onSubmit={submitPassword} className="space-y-4">
-            <div>
+            <div {...rise(3)}>
               <label htmlFor={emailId} className={LABEL}>
                 Email
               </label>
@@ -227,16 +259,25 @@ export function LoginForm({ next, failed }: LoginFormProps) {
                 className={`${FIELD} pr-3.5`}
               />
             </div>
-            <div>
+            <div {...rise(4)}>
               <div className="flex items-baseline justify-between gap-3 mb-2">
                 <label htmlFor={passwordId} className="text-[14px] font-medium text-[#D4D4D8]">
                   Password
                 </label>
-                {mode === "signin" && (
-                  <button type="button" onClick={() => goTo("forgot")} className={TEXT_LINK}>
-                    Forgot password?
-                  </button>
-                )}
+                <AnimatePresence initial={false}>
+                  {mode === "signin" && (
+                    <motion.button
+                      type="button"
+                      onClick={() => goTo("forgot")}
+                      className={TEXT_LINK}
+                      initial={{ opacity: 0, x: 6 }}
+                      animate={{ opacity: 1, x: 0, transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } }}
+                      exit={{ opacity: 0, x: 6, transition: { duration: 0.15 } }}
+                    >
+                      Forgot password?
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </div>
               <PasswordInput
                 id={passwordId}
@@ -248,24 +289,47 @@ export function LoginForm({ next, failed }: LoginFormProps) {
                 onChange={setPassword}
               />
             </div>
-            <button type="submit" disabled={busy} className={PRIMARY}>
-              {busy && !openingGoogle
-                ? mode === "signin"
-                  ? "Logging in…"
-                  : "Creating account…"
-                : mode === "signin"
-                  ? "Log in"
-                  : "Create account"}
-            </button>
+            <div {...rise(5)}>
+              <button type="submit" disabled={busy} className={PRIMARY}>
+                {(() => {
+                  const label =
+                    busy && !openingGoogle
+                      ? mode === "signin"
+                        ? "Logging in…"
+                        : "Creating account…"
+                      : mode === "signin"
+                        ? "Log in"
+                        : "Create account";
+                  return (
+                    <span key={label} className="ll-swap inline-block">
+                      {label}
+                    </span>
+                  );
+                })()}
+              </button>
+            </div>
           </form>
         </>
       )}
 
       {step === "code" && (
-        <form onSubmit={verifyCode} className="space-y-4">
-          <OtpInput value={code} onChange={setCode} disabled={busy} autoFocus status={error ? "error" : "idle"} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            verifyCode(code);
+          }}
+          className="space-y-5"
+        >
+          <OtpInput
+            value={code}
+            onChange={changeCode}
+            onComplete={verifyCode}
+            // Not disabled while checking: a disabled input drops focus, so a retry after a wrong code would need a click.
+            autoFocus
+            status={verified ? "success" : error ? "error" : "idle"}
+          />
           <button type="submit" disabled={busy || code.length !== 6} className={PRIMARY}>
-            {busy ? "Checking…" : "Verify and continue"}
+            {verified ? "Verified" : busy ? "Checking…" : "Verify and continue"}
           </button>
           <div className="flex items-center justify-between gap-3">
             <button type="button" onClick={resendCode} className={TEXT_LINK}>
@@ -321,17 +385,31 @@ export function LoginForm({ next, failed }: LoginFormProps) {
         </div>
       )}
 
+      {step === "done" && <SuccessTick onDone={enterApp} />}
+
       </motion.div>
       </AnimatePresence>
+      {/* In body, not here: the login page's main is transformed while the arrival animation runs, which would trap a fixed layer */}
+      {leaving &&
+        createPortal(
+          <motion.div
+            aria-hidden="true"
+            className="fixed inset-0 z-[100] bg-[#09090B]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          />,
+          document.body,
+        )}
       </MotionConfig>
 
       {error && (
-        <p role="alert" className="mt-4 text-[13px] text-[#F87171] leading-relaxed">
+        <p key={error} role="alert" className="ll-swap mt-4 text-[13px] text-[#F87171] leading-relaxed">
           {error}
         </p>
       )}
       {info && (
-        <p role="status" className="mt-4 text-[13px] text-[#B4B4BC] leading-relaxed">
+        <p key={info} role="status" className="ll-swap mt-4 text-[13px] text-[#B4B4BC] leading-relaxed">
           {info}
         </p>
       )}

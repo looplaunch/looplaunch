@@ -1,5 +1,5 @@
 import { AppSkeleton } from "@/components/app/AppSkeleton";
 
 export default function Loading() {
-  return <AppSkeleton rows={4} />;
+  return <AppSkeleton active="history" rows={4} />;
 }

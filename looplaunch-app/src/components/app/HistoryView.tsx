@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppNav } from "@/components/app/AppNav";
+import { PageTransition } from "@/components/app/PageTransition";
 import { AnalysisRow, HISTORY_COLUMNS } from "@/components/app/AnalysisRow";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import type { ProfileInfo } from "@/lib/auth/profile";
@@ -13,9 +14,10 @@ export function HistoryView({ profile, sessions }: { profile: ProfileInfo; sessi
   const ready = sessions.filter((s) => s.status === "ready").length;
 
   return (
+    <PageTransition>
     <div className="min-h-screen bg-[#09090B] text-[#F4F4F5]">
       <AppNav profile={profile} active="history" />
-      <main className="mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
+      <main className="ll-page mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
         {/* The top bar already carries New analysis, so the header only names the page */}
         <header className="mb-8">
           <h1 className="text-[26px] sm:text-[30px] leading-tight font-semibold tracking-[-0.02em]">History</h1>
@@ -60,5 +62,6 @@ export function HistoryView({ profile, sessions }: { profile: ProfileInfo; sessi
         )}
       </main>
     </div>
+    </PageTransition>
   );
 }

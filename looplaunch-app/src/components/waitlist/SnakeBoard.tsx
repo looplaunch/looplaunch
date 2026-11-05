@@ -281,11 +281,24 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
 
     // The board takes the room the screen has, in whole cells: the column's width, and the window's
     // height less the header, the clock above the board and the controls below it.
+    // The leaderboard beside the board takes its height and top edge from these (GameArena).
+    const arena = root.closest<HTMLElement>("[data-arena]");
+    let placing = 0;
+    const share = (size: number) => {
+      if (!arena) return;
+      arena.style.setProperty("--board", `${size}px`);
+      cancelAnimationFrame(placing);
+      placing = requestAnimationFrame(() => {
+        const top = frame.getBoundingClientRect().top - arena.getBoundingClientRect().top;
+        arena.style.setProperty("--board-top", `${Math.round(top)}px`);
+      });
+    };
     const resize = () => {
       const room = window.innerHeight - HEADER_PX - hud.offsetHeight - below.offsetHeight - 40;
       const cell = Math.max(16, Math.floor(Math.min(root.clientWidth, room, 576) / GRID));
       const size = cell * GRID;
       const dpr = Math.min(3, window.devicePixelRatio || 1);
+      share(size);
       if (size === fx.size && canvas.width === size * dpr) return;
       fx.cell = cell;
       fx.size = size;
@@ -296,6 +309,8 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
     };
     const observer = new ResizeObserver(resize);
     observer.observe(root);
+    // The status line above the board can wrap, which moves the board without resizing the column.
+    observer.observe(hud);
     window.addEventListener("resize", resize);
     resize();
 
@@ -519,6 +534,7 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
 
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(placing);
       observer.disconnect();
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", onKey);

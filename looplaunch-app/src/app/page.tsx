@@ -23,7 +23,7 @@ export default async function Home() {
   if (user && canUseApp(user.email)) {
     // The page's outline shows at once; the analyses stream in when the query answers.
     return (
-      <Suspense fallback={<AppSkeleton rows={3} aside />}>
+      <Suspense fallback={<AppSkeleton rows={3} aside active="home" />}>
         <SignedInDashboard user={user} />
       </Suspense>
     );

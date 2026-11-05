@@ -185,3 +185,91 @@ html {
     text-decoration-color: currentColor;
   }
 }
+
+/* After login the app's bar rises in as the login page fades out (LoginForm sets data-arriving);
+   the page below gets the usual .ll-page entrance. */
+@keyframes ll-arrive {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ll-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ll-swap {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ll-card {
+  from { opacity: 0; transform: translateY(22px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+html[data-arriving] header { animation: ll-arrive 0.5s var(--ease-out) both; }
+
+/* App pages: each section rises in a beat after the one above whenever it lands, on navigation or
+   when streamed content arrives. "backwards" so nothing is held after it ends (motion's own styles win). */
+.ll-page > * { animation: ll-arrive 0.5s var(--ease-out) backwards; }
+.ll-page > :nth-child(2) { animation-delay: 0.05s; }
+.ll-page > :nth-child(n + 3) { animation-delay: 0.1s; }
+.ll-page > .grid { animation: none; }
+.ll-page > .grid > * { animation: ll-arrive 0.55s var(--ease-out) backwards; }
+.ll-page > .grid > :nth-child(1) { animation-delay: 0.1s; }
+.ll-page > .grid > :nth-child(2) { animation-delay: 0.16s; }
+.ll-page > .grid > :nth-child(n + 3) { animation-delay: 0.22s; }
+
+/* Page changes (PageTransition): the old page fades out quickly, the new one fades in under it.
+   The top bar is held still so only the content moves. */
+::view-transition { pointer-events: none; }
+::view-transition-old(.page-out) { animation: 150ms var(--ease-soft) both ll-fade reverse; }
+::view-transition-new(.page-in) { animation: 280ms var(--ease-out) 60ms both ll-fade; }
+::view-transition-group(app-header) { animation: none; z-index: 100; }
+::view-transition-old(app-header) { display: none; }
+::view-transition-new(app-header) { animation: none; }
+
+/* The question bar under an analysis slides up when the conversation opens. */
+@keyframes ll-bar-in {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: none; }
+}
+.ll-bar-in { animation: ll-bar-in 0.45s var(--ease-out) 0.15s backwards; }
+
+/* The line across the top while a page loads (NavProgress). */
+.ll-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 110;
+  height: 2px;
+  background: #8b5cf6;
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 0;
+  pointer-events: none;
+}
+.ll-progress[data-state="loading"] {
+  opacity: 1;
+  transform: scaleX(0.85);
+  transition: transform 6s cubic-bezier(0.08, 0.82, 0.17, 1), opacity 0.15s ease;
+}
+.ll-progress[data-state="done"] {
+  opacity: 0;
+  transform: scaleX(1);
+  transition: transform 0.2s var(--ease-out), opacity 0.3s ease 0.2s;
+}
+
+/* Login card: the card settles, then its parts rise in order (--d sets each one's delay). */
+.ll-card { animation: ll-card 0.75s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.ll-rise { animation: ll-arrive 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: var(--d, 0s); }
+.ll-swap { animation: ll-swap 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-arriving] header,
+  .ll-page > *,
+  .ll-page > .grid > *,
+  .ll-bar-in,
+  .ll-card,
+  .ll-rise,
+  .ll-swap { animation-name: ll-fade; animation-duration: 0.2s; animation-delay: 0s; }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
+}

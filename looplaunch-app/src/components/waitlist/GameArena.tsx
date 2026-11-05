@@ -14,6 +14,8 @@ import { useWaitlistGame } from "./WaitlistGame";
 // Long enough to see the finish (the ring, the confetti, the time locking in) before the form.
 const FINISH_PAUSE_MS = 1100;
 
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
 const touchQuery = "(hover: none), (pointer: coarse)";
 const subscribeTouch = (onChange: () => void) => {
   const query = matchMedia(touchQuery);
@@ -86,6 +88,7 @@ export function GameArena() {
     [saveRun, showClaim]
   );
 
+  const playing = arena.stage === "game";
   const mine = me ? { id: me.entryId, bestMs: me.bestMs } : null;
   let you: YouRow | null = null;
   // "This run" when they're racing their own saved best on the board, "You" otherwise.
@@ -127,49 +130,70 @@ export function GameArena() {
               </button>
             </header>
 
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 240, damping: 28 }}
-              className="mx-auto flex w-full max-w-[1140px] flex-col gap-6 px-4 pb-8 sm:px-6 lg:grid lg:h-[calc(100dvh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(300px,340px)] lg:gap-10 lg:pb-6"
-            >
-              <div className="flex flex-col lg:min-h-0">
-                {arena.stage === "game" && (
-                  <SnakeBoard
-                    clock={clock}
-                    target={board?.top[0]?.timeMs ?? null}
-                    touch={touch}
-                    onStatus={setRunStatus}
-                    onFinish={onFinish}
-                    onSkip={game.skip}
-                    onEscape={close}
-                  />
-                )}
-                {arena.stage === "claim" && (
-                  <div className="flex flex-1 items-start justify-center lg:items-center">
-                    <ClaimCard
-                      run={arena.run}
-                      board={board}
-                      me={me}
-                      signedInEmail={signedInEmail}
-                      draftName={game.draftName}
-                      onJoined={game.joined}
-                      onPlayAgain={game.playAgain}
-                      onClose={close}
+            {/* SnakeBoard sets --board and --board-top on [data-arena] so the leaderboard lines up with the board */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={playing ? "game" : "forms"}
+                data-arena
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE_OUT } }}
+                exit={{ opacity: 0, transition: { duration: 0.16 } }}
+                className={
+                  playing
+                    ? "mx-auto flex w-full max-w-[1140px] flex-col gap-6 px-4 pb-8 sm:px-6 lg:grid lg:h-[calc(100dvh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(300px,340px)] lg:gap-10 lg:pb-6"
+                    : // The form screens: card and leaderboard side by side, centred together, the same height.
+                      "mx-auto flex w-full max-w-[1140px] flex-col items-center gap-6 px-4 pb-8 sm:px-6 lg:flex-row lg:items-stretch lg:justify-center lg:gap-8 lg:pb-16 lg:pt-[6vh]"
+                }
+              >
+                <div className={playing ? "flex flex-col lg:min-h-0" : "flex w-full max-w-[460px] flex-col"}>
+                  {arena.stage === "game" && (
+                    <SnakeBoard
+                      clock={clock}
+                      target={board?.top[0]?.timeMs ?? null}
+                      touch={touch}
+                      onStatus={setRunStatus}
+                      onFinish={onFinish}
+                      onSkip={game.skip}
+                      onEscape={close}
                     />
-                  </div>
-                )}
-                {arena.stage === "done" && arena.result && (
-                  <div className="flex flex-1 items-start justify-center lg:items-center">
-                    <DoneCard result={arena.result} me={me} onPlayAgain={game.playAgain} onClose={close} />
-                  </div>
-                )}
-              </div>
+                  )}
+                  <AnimatePresence mode="wait" initial={false}>
+                    {arena.stage === "claim" && (
+                      <motion.div key="claim" exit={{ opacity: 0, transition: { duration: 0.15 } }} className="flex flex-1 justify-center">
+                        <ClaimCard
+                          run={arena.run}
+                          board={board}
+                          me={me}
+                          signedInEmail={signedInEmail}
+                          draftName={game.draftName}
+                          onJoined={game.joined}
+                          onPlayAgain={game.playAgain}
+                          onClose={close}
+                        />
+                      </motion.div>
+                    )}
+                    {arena.stage === "done" && arena.result && (
+                      <motion.div key="done" exit={{ opacity: 0, transition: { duration: 0.15 } }} className="flex flex-1 justify-center">
+                        <DoneCard result={arena.result} me={me} onPlayAgain={game.playAgain} onClose={close} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
-              <aside className="lg:min-h-0 lg:overflow-y-auto lg:pb-2" aria-label="Leaderboard">
-                <Leaderboard board={board} status={boardStatus} clock={clock} you={you} mine={mine} />
-              </aside>
-            </motion.div>
+                <motion.aside
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: { duration: 0.35, delay: 0.1 } }}
+                  className={
+                    playing
+                      ? "lg:mt-[var(--board-top,0px)] lg:h-[var(--board,auto)] lg:min-h-0 lg:self-start"
+                      : "w-full max-w-[460px] lg:w-[340px] lg:max-w-none lg:shrink-0"
+                  }
+                  aria-label="Leaderboard"
+                >
+                  <Leaderboard board={board} status={boardStatus} clock={clock} you={you} mine={mine} />
+                </motion.aside>
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

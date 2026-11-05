@@ -39,6 +39,12 @@ export interface CodeSlotsProps {
   slotColor?: string;
   digitColor?: string;
   dangerColor?: string;
+  /** Resting outline of an empty slot */
+  ringColor?: string;
+  /** Ring that glides to the slot being typed in */
+  focusColor?: string;
+  successColor?: string;
+  onSuccessColor?: string;
   slotSize?: number;
   gap?: number;
   radius?: number;
@@ -58,6 +64,8 @@ interface Live {
 }
 
 interface SlotProps {
+  index: number;
+  enter: boolean;
   mv: MotionValue<number>;
   drop: MotionValue<number>;
   char: string;
@@ -95,6 +103,10 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
   slotColor = '#27272a',
   digitColor = '#18181b',
   dangerColor = '#ff3b30',
+  ringColor = 'transparent',
+  focusColor,
+  successColor,
+  onSuccessColor,
   slotSize = 44,
   gap = 8,
   radius = 12,
@@ -377,6 +389,9 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
 
   useEffect(() => {
     if (status !== 'error') return;
+    if (!live.current.reduce && rowRef.current) {
+      animate(rowRef.current, { x: [0, -8, 7, -5, 4, -2, 0] }, { duration: 0.45, ease: 'easeOut' });
+    }
     const filled = slotsRef.current.map((c, i) => (c ? i : -1)).filter(i => i >= 0);
     if (!filled.length) return;
     filled.reverse();
@@ -407,6 +422,7 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
   }, [autoFocus]);
 
   const view = slots.length === length ? slots : Array.from({ length }, (_, i) => slots[i] ?? '');
+  const showRing = focused && !disabled && !veiled && status !== 'success';
   const showCaret =
     caret && focused && !disabled && !veiled && status !== 'success' && (status === 'error' || !view[active]);
 
@@ -420,6 +436,10 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
           '--cs-slot': slotColor,
           '--cs-digit': digitColor,
           '--cs-danger': dangerColor,
+          '--cs-ring': ringColor,
+          '--cs-focus': focusColor ?? inkColor,
+          '--cs-success': successColor ?? accentColor,
+          '--cs-on-success': onSuccessColor ?? digitColor,
           '--cs-size': `${slotSize}px`,
           '--cs-height': `${height}px`,
           '--cs-gap': `${gap}px`,
@@ -460,6 +480,8 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
         {view.map((ch, i) => (
           <Slot
             key={i}
+            index={i}
+            enter={!reduce}
             mv={mvs[i]}
             drop={drops[i]}
             char={mask && ch ? '•' : ch}
@@ -469,7 +491,7 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
           />
         ))}
         <motion.span
-          className="pointer-events-none absolute inset-0 z-[1] grid place-items-center rounded-[var(--cs-radius)] bg-[var(--cs-accent)] [color:var(--cs-digit)] motion-reduce:opacity-0 motion-reduce:[transition:opacity_200ms_ease] motion-reduce:in-data-[status=success]:opacity-100"
+          className="pointer-events-none absolute inset-0 z-[1] grid place-items-center rounded-[var(--cs-radius)] bg-[var(--cs-success)] [color:var(--cs-on-success)] motion-reduce:opacity-0 motion-reduce:[transition:opacity_200ms_ease] motion-reduce:in-data-[status=success]:opacity-100"
           aria-hidden="true"
           style={{ clipPath: washClip }}
         >
@@ -480,6 +502,12 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
             <Check size={Math.round(slotSize * 0.6)} strokeWidth={2.2} />
           </motion.span>
         </motion.span>
+        <motion.span
+          className="pointer-events-none absolute top-0 left-0 z-[3] h-[var(--cs-height)] w-[var(--cs-size)] rounded-[var(--cs-radius)] border-2 border-[var(--cs-focus)] opacity-0 shadow-[0_0_0_4px_color-mix(in_srgb,var(--cs-focus)_22%,transparent)] [transition:opacity_160ms_ease,border-color_200ms_ease] data-[show]:opacity-100 in-data-[status=error]:border-[var(--cs-danger)] in-data-[status=error]:shadow-[0_0_0_4px_color-mix(in_srgb,var(--cs-danger)_22%,transparent)]"
+          aria-hidden="true"
+          data-show={showRing ? '' : undefined}
+          style={{ transform: caretTransform }}
+        />
         <motion.span
           className="pointer-events-none absolute top-1/4 left-[calc(var(--cs-size)/2_-_0.75px)] z-[3] h-1/2 w-[1.5px] opacity-0 data-[show]:opacity-100"
           aria-hidden="true"
@@ -499,7 +527,7 @@ const CodeSlots: React.FC<CodeSlotsProps> = ({
   );
 };
 
-function Slot({ mv, drop, char, active, rise, sink }: SlotProps) {
+function Slot({ index, enter, mv, drop, char, active, rise, sink }: SlotProps) {
   const [shown, setShown] = useState(char);
   if (char && char !== shown) setShown(char);
   const fill = useTransform(mv, (t: number) => `scale(${Math.max(t, 0)})`);
@@ -509,8 +537,11 @@ function Slot({ mv, drop, char, active, rise, sink }: SlotProps) {
   );
   const ink = useTransform([mv, drop], ([t, d]: number[]) => clamp01(t) * (1 - clamp01(d / SINK_FADE)));
   return (
-    <span
-      className="relative h-[var(--cs-height)] w-[var(--cs-size)] overflow-hidden rounded-[var(--cs-radius)] bg-[var(--cs-slot)] select-none [transition:background-color_200ms_ease] data-[active]:[background-color:color-mix(in_srgb,var(--cs-ink)_8%,var(--cs-slot))] in-data-[status=error]:[background-color:color-mix(in_srgb,var(--cs-danger)_20%,var(--cs-slot))] in-data-[status=error]:data-[active]:[background-color:color-mix(in_srgb,var(--cs-danger)_20%,var(--cs-slot))] [@media(hover:hover)_and_(pointer:fine)]:group-hover/row:in-data-[status=idle]:not-in-data-[disabled]:not-data-[active]:[background-color:color-mix(in_srgb,var(--cs-ink)_4%,var(--cs-slot))]"
+    <motion.span
+      initial={enter ? { opacity: 0, y: 14, scale: 0.9 } : false}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: 'spring', duration: 0.5, bounce: 0.25, delay: 0.05 + index * 0.05 }}
+      className="relative h-[var(--cs-height)] w-[var(--cs-size)] overflow-hidden rounded-[var(--cs-radius)] bg-[var(--cs-slot)] shadow-[inset_0_0_0_1px_var(--cs-ring)] select-none [transition:background-color_200ms_ease,box-shadow_200ms_ease] in-data-[status=error]:shadow-[inset_0_0_0_1px_var(--cs-danger)] data-[active]:[background-color:color-mix(in_srgb,var(--cs-ink)_8%,var(--cs-slot))] in-data-[status=error]:[background-color:color-mix(in_srgb,var(--cs-danger)_20%,var(--cs-slot))] in-data-[status=error]:data-[active]:[background-color:color-mix(in_srgb,var(--cs-danger)_20%,var(--cs-slot))] [@media(hover:hover)_and_(pointer:fine)]:group-hover/row:in-data-[status=idle]:not-in-data-[disabled]:not-data-[active]:[background-color:color-mix(in_srgb,var(--cs-ink)_4%,var(--cs-slot))]"
       data-active={active ? '' : undefined}
       data-filled={char ? '' : undefined}
       aria-hidden="true"
@@ -527,7 +558,7 @@ function Slot({ mv, drop, char, active, rise, sink }: SlotProps) {
           {shown}
         </motion.span>
       ) : null}
-    </span>
+    </motion.span>
   );
 }
 

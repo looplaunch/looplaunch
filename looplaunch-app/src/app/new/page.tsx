@@ -1,4 +1,5 @@
 import { AppNav } from "@/components/app/AppNav";
+import { PageTransition } from "@/components/app/PageTransition";
 import { NewAnalysis } from "@/components/onboarding/NewAnalysis";
 import { getTokenUser } from "@/lib/auth/supabase-server";
 import { profileOf } from "@/lib/auth/profile";
@@ -11,9 +12,13 @@ export default async function NewAnalysisPage({ searchParams }: { searchParams: 
   const fromLink = typeof website === "string" && /^https?:\/\/[^\s]+\.[^\s]+$/i.test(website) ? website : undefined;
 
   return (
-    <div className="min-h-screen bg-[#09090B]">
-      <AppNav profile={profile} active="new" />
-      <NewAnalysis defaultWebsite={fromLink || profile?.companyWebsite || undefined} />
-    </div>
+    <PageTransition>
+      <div className="min-h-screen bg-[#09090B]">
+        <AppNav profile={profile} active="new" />
+        <div className="ll-page">
+          <NewAnalysis defaultWebsite={fromLink || profile?.companyWebsite || undefined} />
+        </div>
+      </div>
+    </PageTransition>
   );
 }

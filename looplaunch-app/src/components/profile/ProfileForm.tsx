@@ -159,7 +159,7 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
 
         <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
           {note && (
-            <span role={note.ok ? "status" : "alert"} className={`text-[13px] ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>
+            <span key={note.text} role={note.ok ? "status" : "alert"} className={`ll-swap text-[13px] ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>
               {note.text}
             </span>
           )}

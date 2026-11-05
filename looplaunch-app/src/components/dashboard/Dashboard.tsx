@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, MessageSquare, Pencil } from "lucide-react";
 import { AppNav } from "@/components/app/AppNav";
+import { PageTransition } from "@/components/app/PageTransition";
 import { AnalysisStatusMark, openHref, statusText, timeAgo } from "@/components/app/AnalysisRow";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { pickTips } from "@/components/loopy/tips";
@@ -30,16 +31,18 @@ interface DashboardProps {
 /** Home for signed-in users: a first-run setup with no analyses, a workspace after that. */
 export function Dashboard({ profile, sessions, truncated = false }: DashboardProps) {
   return (
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5]">
-      <AppNav profile={profile} active="home" />
-      <main className="mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
-        {sessions.length === 0 ? (
-          <FirstRun profile={profile} />
-        ) : (
-          <Workspace profile={profile} sessions={sessions} truncated={truncated} />
-        )}
-      </main>
-    </div>
+    <PageTransition>
+      <div className="min-h-screen bg-[#09090B] text-[#F4F4F5]">
+        <AppNav profile={profile} active="home" />
+        <main className="ll-page mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
+          {sessions.length === 0 ? (
+            <FirstRun profile={profile} />
+          ) : (
+            <Workspace profile={profile} sessions={sessions} truncated={truncated} />
+          )}
+        </main>
+      </div>
+    </PageTransition>
   );
 }
 

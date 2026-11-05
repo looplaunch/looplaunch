@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { AnimatedHeight } from "@/components/ui/AnimatedHeight";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 
 interface AuthShellProps {
@@ -8,6 +9,8 @@ interface AuthShellProps {
   subtitle: ReactNode;
   children: ReactNode;
 }
+
+const delay = (s: number) => ({ "--d": `${s}s` }) as CSSProperties;
 
 /** The login and password pages: the wordmark home, then one panel with Loopy, the title and the form. */
 export function AuthShell({ title, subtitle, children }: AuthShellProps) {
@@ -26,14 +29,23 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
 
       <main className="flex-1 flex items-start sm:items-center justify-center px-4 pt-6 pb-16 sm:py-16">
         <div className="w-full max-w-[400px]">
-          <div className="rounded-[20px] bg-[#111114] p-6 sm:p-8">
-            <LoopyMascot size={44} />
-            <h1 className="mt-4 text-[26px] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
-            <p className="mt-2 text-[15px] leading-[1.5] text-[#B4B4BC]">{subtitle}</p>
-            <div className="mt-6">{children}</div>
+          <div className="ll-card rounded-[20px] bg-[#111114] p-6 sm:p-8">
+            <AnimatedHeight>
+              <div className="ll-rise" style={delay(0.1)}>
+                <LoopyMascot size={44} mood="float" />
+              </div>
+              <div className="ll-rise" style={delay(0.16)}>
+                {/* Keyed so a new step's title fades in instead of snapping */}
+                <div key={title} className="ll-swap">
+                  <h1 className="mt-4 text-[26px] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
+                  <p className="mt-2 text-[15px] leading-[1.5] text-[#B4B4BC]">{subtitle}</p>
+                </div>
+              </div>
+              <div className="mt-6">{children}</div>
+            </AnimatedHeight>
           </div>
 
-          <p className="mt-5 px-2 text-center text-[13px] leading-relaxed text-[#8B8B94]">
+          <p className="ll-rise mt-5 px-2 text-center text-[13px] leading-relaxed text-[#8B8B94]" style={delay(0.55)}>
             By continuing you agree to our{" "}
             <Link href="/terms" className="text-[#B4B4BC] underline underline-offset-2 hover:text-white">
               Terms

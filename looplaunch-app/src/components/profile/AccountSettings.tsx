@@ -32,7 +32,11 @@ interface AccountSettingsProps {
 
 function Message({ note }: { note: Note }) {
   if (!note) return null;
-  return <p className={`text-[13px] leading-relaxed ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>{note.text}</p>;
+  return (
+    <p key={note.text} className={`ll-swap text-[13px] leading-relaxed ${note.ok ? "text-[#34D399]" : "text-[#F87171]"}`}>
+      {note.text}
+    </p>
+  );
 }
 
 function Row({ label, value, action, children }: { label: string; value: ReactNode; action?: ReactNode; children?: ReactNode }) {
