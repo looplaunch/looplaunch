@@ -6,8 +6,11 @@
 const DEFAULT_SITE_URL = "https://looplaunch.co";
 
 export function getSiteUrl(): string {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "");
+  // Trim first: a value pasted into the host's env settings can carry a trailing newline, which
+  // ended up inside every sitemap, robots.txt and JSON-LD URL ("https://looplaunch.co\n/privacy").
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, "");
   }
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;

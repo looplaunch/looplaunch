@@ -99,6 +99,8 @@ const jsonLd = {
       "@id": `${siteUrl}/#website`,
       "url": siteUrl,
       "name": "Loop Launch",
+      // The one-word spellings people type into Google, so "looplaunch" matches this site by name.
+      "alternateName": ["LoopLaunch", "looplaunch.co"],
       "description": siteConfig.description,
       "inLanguage": "en-US",
     },
