@@ -7,7 +7,12 @@
  * a code change. Without it, the founders' emails below are used.
  */
 
-const DEFAULT_TEAM_EMAILS = ["work@looplaunch.co", "rhythmsarma66@gmail.com", "lordsimp234@gmail.com"];
+const DEFAULT_TEAM_EMAILS = [
+  "work@looplaunch.co",
+  "rhythmsarma66@gmail.com",
+  "lordsimp234@gmail.com",
+  "loop.launchx@gmail.com",
+];
 
 export function teamEmails(): Set<string> {
   const fromEnv = process.env.TEAM_EMAILS?.split(",")
