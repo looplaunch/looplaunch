@@ -15,7 +15,7 @@ export function HistoryView({ profile, sessions }: { profile: ProfileInfo; sessi
 
   return (
     <PageTransition>
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5]">
+    <div className="min-h-svh bg-[#09090B] text-[#F4F4F5]">
       <AppNav profile={profile} active="history" />
       <main className="ll-page mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
         {/* The top bar already carries New analysis, so the header only names the page */}

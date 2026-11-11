@@ -5,7 +5,7 @@ import Image from "next/image";
 
 export default function ReadyPage() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-bg-primary px-6">
+    <main className="min-h-svh flex flex-col items-center justify-center bg-bg-primary px-6">
       {/* Brand Logo */}
       <div className="mb-8">
         <Image

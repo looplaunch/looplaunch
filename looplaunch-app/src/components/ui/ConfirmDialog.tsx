@@ -92,7 +92,7 @@ export function ConfirmDialog({
                   onChange={(e) => setTyped(e.target.value)}
                   autoFocus
                   autoComplete="off"
-                  className="w-full h-10 rounded-[10px] bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] px-3.5 text-[15px] text-[#F4F4F5] outline-none focus:border-[#F87171] transition-colors"
+                  className="w-full h-10 rounded-[10px] bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] px-3.5 text-[15px] pointer-coarse:text-[16px] text-[#F4F4F5] outline-none focus:border-[#F87171] transition-colors"
                 />
               </label>
             )}

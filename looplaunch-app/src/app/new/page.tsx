@@ -13,7 +13,7 @@ export default async function NewAnalysisPage({ searchParams }: { searchParams: 
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#09090B]">
+      <div className="min-h-svh bg-[#09090B]">
         <AppNav profile={profile} active="new" />
         <div className="ll-page">
           <NewAnalysis defaultWebsite={fromLink || profile?.companyWebsite || undefined} />

@@ -8,7 +8,7 @@ import type { ProfileInfo } from "@/lib/auth/profile";
 export function SettingsView({ profile, pendingEmail }: { profile: ProfileInfo; pendingEmail?: string }) {
   return (
     <PageTransition>
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5]">
+    <div className="min-h-svh bg-[#09090B] text-[#F4F4F5]">
       <AppNav profile={profile} active="profile" />
       <main className="ll-page mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
         <header className="mb-8">

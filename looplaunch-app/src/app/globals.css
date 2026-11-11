@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* `short:` styles a phone held sideways: wide, but with very little height to work with.
+   Kept below the desktop width so a short desktop window keeps the desktop layout. */
+@custom-variant short {
+  @media (orientation: landscape) and (max-height: 540px) and (max-width: 1023px) {
+    @slot;
+  }
+}
+
 /* ─── Design Tokens (Strict Loop Launch Palette) ─── */
 :root {
   --bg-primary: #09090B;

@@ -13,7 +13,7 @@ interface LegalPageProps {
 /** Shared layout for the Privacy Policy and Terms pages. */
 export function LegalPage({ title, updated, intro, children }: LegalPageProps) {
   return (
-    <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary">
+    <div className="min-h-svh flex flex-col bg-bg-primary text-text-primary">
       <header className="border-b border-border-subtle">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
           <Link href="/">

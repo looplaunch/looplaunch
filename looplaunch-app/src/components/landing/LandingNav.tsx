@@ -46,7 +46,7 @@ export function LandingNav({ onGetStarted, ctaLabel = "Get started", appLinks = 
             </a>
           ))}
           {appLinks && (
-            <Link href="/login" className="ll-link">
+            <Link href="/login" className="ll-link ll-nav__login">
               Log in
             </Link>
           )}

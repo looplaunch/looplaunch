@@ -32,7 +32,7 @@ interface DashboardProps {
 export function Dashboard({ profile, sessions, truncated = false }: DashboardProps) {
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#09090B] text-[#F4F4F5]">
+      <div className="min-h-svh bg-[#09090B] text-[#F4F4F5]">
         <AppNav profile={profile} active="home" />
         <main className="ll-page mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-20">
           {sessions.length === 0 ? (
@@ -141,7 +141,7 @@ function FirstRun({ profile }: { profile: ProfileInfo }) {
           </dl>
         </section>
 
-        <div className="lg:col-span-4 flex flex-col gap-4">
+        <div className="lg:col-span-4 grid gap-4 md:grid-cols-2 lg:grid-cols-1">
         <section className={panel} aria-labelledby="setup-title">
           <PanelTitle aside={<span className="text-[13px] text-[#B4B4BC] tabular-nums">{pct}%</span>}>
             <span id="setup-title">Getting started</span>
@@ -232,18 +232,21 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
         </div>
         <Link
           href={openHref(latest)}
-          className="inline-flex items-center gap-2 h-10 px-5 rounded-full bg-[#F4F4F5] text-[#09090B] text-sm font-semibold hover:bg-white active:scale-[0.98] transition"
+          className="inline-flex max-w-full items-center gap-2 h-10 px-5 rounded-full bg-[#F4F4F5] text-[#09090B] text-sm font-semibold hover:bg-white active:scale-[0.98] transition"
         >
-          {latest.status === "ready" ? "Continue with " : "Open "}
-          {latest.companyName}
-          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          {/* A long company name shortens with an ellipsis instead of breaking the pill onto two lines */}
+          <span className="truncate">
+            {latest.status === "ready" ? "Continue with " : "Open "}
+            {latest.companyName}
+          </span>
+          <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
         </Link>
       </header>
 
       {/* The counts as one strip of figures, not four tiles */}
-      <dl className={`${panel} grid grid-cols-2 lg:grid-cols-4 gap-y-5 mb-4`}>
+      <dl className={`${panel} grid grid-cols-2 md:grid-cols-4 gap-y-5 mb-4`}>
         {counts.map((c, i) => (
-          <div key={c.label} className={`min-w-0 ${i % 2 ? "pl-5" : ""} ${i > 0 ? "lg:pl-6" : ""}`}>
+          <div key={c.label} className={`min-w-0 ${i % 2 ? "pl-5" : ""} ${i > 0 ? "md:pl-6" : ""}`}>
             <dt className="text-[13px] text-[#B4B4BC]">{c.label}</dt>
             <dd className="mt-1 text-[30px] leading-9 font-semibold tracking-[-0.02em] tabular-nums">
               <RollingCount value={c.value} suffix={c.more || undefined} />
@@ -259,8 +262,8 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
           <PanelTitle aside={<span className="text-[13px] text-[#8B8B94]">Updated {timeAgo(latest.updatedAt).toLowerCase()}</span>}>
             <span id="latest-title">Latest analysis</span>
           </PanelTitle>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
+            <div className="min-w-0 max-w-full">
               <p className="text-[22px] font-semibold tracking-[-0.01em] truncate">{latest.companyName}</p>
               <p className="text-[14px] text-[#B4B4BC] truncate">
                 {[displayDomain(latest.website), latest.industry].filter(Boolean).join(" · ")}
@@ -319,7 +322,7 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
 
         </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-4">
+        <div className="lg:col-span-4 grid gap-4 md:grid-cols-2 lg:grid-cols-1">
           <section className={panel} aria-labelledby="business-title">
             <PanelTitle
               aside={
@@ -347,8 +350,8 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
         </div>
 
         {/* A full-width bar, so no shorter card sits beside the list */}
-        <section className={`${panel} lg:col-span-12 grid lg:grid-cols-12 gap-x-4 gap-y-4 items-end`} aria-labelledby="new-title">
-          <div className="lg:col-span-5">
+        <section className={`${panel} lg:col-span-12 grid md:grid-cols-12 gap-x-4 gap-y-4 items-end`} aria-labelledby="new-title">
+          <div className="md:col-span-5">
             <h2 id="new-title" className="text-[15px] font-semibold text-[#F4F4F5]">
               New analysis
             </h2>
@@ -356,7 +359,7 @@ function Workspace({ profile, sessions, truncated }: { profile: ProfileInfo; ses
               Run another site: a competitor, a new product, or yours again after changes.
             </p>
           </div>
-          <div className="lg:col-span-7">
+          <div className="md:col-span-7">
             <StartAnalysisForm action="Analyse" />
           </div>
         </section>

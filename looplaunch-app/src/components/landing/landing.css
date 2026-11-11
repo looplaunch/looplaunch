@@ -188,8 +188,28 @@
   font-size: var(--t-small);
 }
 @media (max-width: 760px) {
+  .ll-nav__links {
+    gap: 16px;
+  }
   .ll-nav__links a {
     display: none;
+  }
+  /* Log in stays on a phone: with the section links gone it's the only way back into an account */
+  .ll-nav__links a.ll-nav__login {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+  }
+}
+@media (max-width: 380px) {
+  .ll-nav__bar {
+    gap: 12px;
+  }
+  .ll-nav__links {
+    gap: 12px;
+  }
+  .ll-nav .ll-button {
+    padding: 0 14px;
   }
 }
 
@@ -236,7 +256,7 @@
 /* ─── How it works: four lines that step across ─── */
 
 .ll-section {
-  padding-block: clamp(80px, 10vw, 150px);
+  padding-block: clamp(56px, 10vw, 150px);
 }
 
 .ll-steps {
@@ -265,14 +285,29 @@
 .ll-step--2 .ll-step__frag { grid-column: 1 / span 4; }
 .ll-step--3 .ll-step__body { grid-column: 7 / -1; }
 .ll-step--3 .ll-step__frag { grid-column: 1 / span 5; }
+/* Tablets: no room to step across, so each line sits beside its fragment, swapping sides half way down */
 @media (max-width: 900px) {
+  .ll-step .ll-step__body {
+    grid-column: 1 / span 6;
+  }
+  .ll-step .ll-step__frag {
+    grid-column: 7 / -1;
+  }
+  .ll-step--2 .ll-step__body,
+  .ll-step--3 .ll-step__body {
+    grid-column: 7 / -1;
+  }
+  .ll-step--2 .ll-step__frag,
+  .ll-step--3 .ll-step__frag {
+    grid-column: 1 / span 6;
+  }
+}
+/* Phones: one column, every line and fragment flush with the page margin */
+@media (max-width: 700px) {
   .ll-step .ll-step__body,
   .ll-step .ll-step__frag {
     grid-column: 1 / -1;
     grid-row: auto;
-  }
-  .ll-step {
-    padding-left: calc(var(--n) * 5vw);
   }
 }
 
@@ -405,15 +440,12 @@
 .ll-step--last h3 {
   color: var(--accent);
 }
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .ll-steps {
-    gap: 40px;
+    gap: 48px;
   }
   .ll-step {
-    padding-left: calc(var(--n) * 6vw);
-  }
-  .ll-step__text {
-    font-size: var(--t-body);
+    row-gap: 20px;
   }
 }
 
@@ -465,6 +497,16 @@
 .ll-ask__below {
   margin-top: 56px;
   row-gap: 40px;
+}
+@media (max-width: 640px) {
+  /* Sized so the longest example question still fits on one line of a phone */
+  .ll-ask__field {
+    font-size: 8.6vw;
+  }
+  .ll-ask__below {
+    margin-top: 32px;
+    row-gap: 32px;
+  }
 }
 .ll-ask__side {
   grid-column: 1 / span 5;
@@ -891,6 +933,12 @@
 }
 .ll-close .ll-link:hover {
   color: var(--dark);
+}
+/* A tall, narrow screen would leave the footer mostly empty at 82% of its height */
+@media (max-width: 900px) {
+  .ll-close {
+    min-height: min(82svh, 640px);
+  }
 }
 @media (max-width: 640px) {
   .ll-close__notes {

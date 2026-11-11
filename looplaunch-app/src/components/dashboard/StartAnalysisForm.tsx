@@ -61,7 +61,7 @@ export function StartAnalysisForm({ defaultWebsite = "", action = "Analyse this 
             }}
             aria-invalid={!!error}
             aria-describedby={error ? errorId : undefined}
-            className="w-full h-11 pl-10 pr-3 rounded-full bg-[#1C1C21] text-[15px] text-[#F4F4F5] placeholder:text-[#8B8B94] border border-[#2E2E35] hover:border-[#3F3F48] focus:border-[#8B5CF6] outline-none transition-colors"
+            className="w-full h-11 pl-10 pr-3 rounded-full bg-[#1C1C21] text-[15px] pointer-coarse:text-[16px] text-[#F4F4F5] placeholder:text-[#8B8B94] border border-[#2E2E35] hover:border-[#3F3F48] focus:border-[#8B5CF6] outline-none transition-colors"
           />
         </div>
         <button

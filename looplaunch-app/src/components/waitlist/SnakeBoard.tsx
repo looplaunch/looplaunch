@@ -47,6 +47,10 @@ const DX = [0, 1, 0, -1];
 const DY = [-1, 0, 1, 0];
 // The game's header bar, above this component (GameArena's h-16)
 const HEADER_PX = 64;
+// A phone held sideways (the `short:` variant in globals.css): the board sits beside its clock and
+// controls instead of between them, so it can use the whole height.
+const SIDEWAYS = "(orientation: landscape) and (max-height: 540px) and (max-width: 1023px)";
+const SIDE_COLUMN_PX = 224; // the least the clock and direction pad need beside the board
 
 interface Particle {
   x: number;
@@ -294,8 +298,12 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
       });
     };
     const resize = () => {
-      const room = window.innerHeight - HEADER_PX - hud.offsetHeight - below.offsetHeight - 40;
-      const cell = Math.max(16, Math.floor(Math.min(root.clientWidth, room, 576) / GRID));
+      const sideways = window.matchMedia(SIDEWAYS).matches;
+      const room = sideways
+        ? window.innerHeight - HEADER_PX - 24
+        : window.innerHeight - HEADER_PX - hud.offsetHeight - below.offsetHeight - 40;
+      const width = sideways ? root.clientWidth - SIDE_COLUMN_PX - 24 : root.clientWidth;
+      const cell = Math.max(16, Math.floor(Math.min(width, room, 576) / GRID));
       const size = cell * GRID;
       const dpr = Math.min(3, window.devicePixelRatio || 1);
       share(size);
@@ -562,9 +570,15 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
             : `${left} more to go`;
 
   return (
-    <div ref={rootRef} className="flex w-full flex-col items-center lg:flex-1 lg:justify-center">
-      {/* What's left to eat, and the clock, as wide as the board */}
-      <div ref={hudRef} className="flex w-[var(--board,100%)] max-w-full items-end justify-between gap-4 pb-4">
+    <div
+      ref={rootRef}
+      className="flex w-full flex-col items-center lg:flex-1 lg:justify-center short:grid short:grid-cols-[auto_minmax(0,18rem)] short:grid-rows-[auto_1fr] short:items-start short:justify-center short:gap-x-6"
+    >
+      {/* What's left to eat, and the clock, as wide as the board (beside it on a phone held sideways) */}
+      <div
+        ref={hudRef}
+        className="flex w-[var(--board,100%)] max-w-full items-end justify-between gap-4 pb-4 short:col-start-2 short:row-start-1 short:w-full"
+      >
         <div className="min-w-0">
           <div className="flex gap-1.5" aria-hidden="true">
             {Array.from({ length: TARGET }, (_, i) => (
@@ -613,7 +627,7 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
             : { borderColor: "#27272A" }
         }
         transition={view.status === "ready" ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
-        className="relative shrink-0 rounded-[14px] border bg-[#0C0C0E] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/40"
+        className="relative shrink-0 rounded-[14px] border bg-[#0C0C0E] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/40 short:col-start-1 short:row-start-1 short:row-span-2"
         style={{ width: "var(--board, 0px)", height: "var(--board, 0px)", touchAction: "none" }}
       >
         <canvas ref={canvasRef} className="block h-full w-full rounded-[14px]" />
@@ -668,9 +682,9 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
         )}
       </motion.div>
 
-      <div ref={belowRef} className="flex w-full flex-col items-center">
+      <div ref={belowRef} className="flex w-full flex-col items-center short:col-start-2 short:row-start-2">
         {touch && (
-          <div className="mx-auto mt-4 grid grid-cols-[repeat(3,60px)] grid-rows-[repeat(2,54px)] gap-2" aria-label="Direction pad">
+          <div className="mx-auto mt-4 short:mt-1 grid grid-cols-[repeat(3,60px)] grid-rows-[repeat(2,54px)] gap-2" aria-label="Direction pad">
             {(
               [
                 ["Up", UP, "col-start-2", "M4 13l6-6 6 6"],

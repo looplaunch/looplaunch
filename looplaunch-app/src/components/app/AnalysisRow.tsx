@@ -32,7 +32,10 @@ interface AnalysisRowProps {
   detailed?: boolean;
 }
 
-/** One analysis as a row; the whole row opens it. The delete button sits beside the link, since a button can't go inside one. */
+/**
+ * One analysis as a row; the whole row opens it. The delete button sits beside the link, since a button can't go inside one.
+ * On a phone the status and date move under the name, so a long name isn't cut short to make room for them.
+ */
 export function AnalysisRow({ session: s, detailed = false }: AnalysisRowProps) {
   const st = statusText(s);
   const columns = detailed ? HISTORY_COLUMNS : "sm:grid-cols-[minmax(0,1fr)_120px_96px]";
@@ -41,7 +44,7 @@ export function AnalysisRow({ session: s, detailed = false }: AnalysisRowProps) 
     <div className="group relative">
       <Link
         href={openHref(s)}
-        className={`grid grid-cols-[minmax(0,1fr)_auto] ${columns} items-center gap-x-4 min-h-[63px] rounded-[14px] bg-[#1C1C21] px-4 py-2.5 hover:bg-[#232329] focus-visible:bg-[#232329] transition-colors ${
+        className={`grid grid-cols-1 ${columns} items-center gap-x-4 min-h-[63px] rounded-[14px] bg-[#1C1C21] px-4 py-3 sm:py-2.5 hover:bg-[#232329] focus-visible:bg-[#232329] transition-colors ${
           detailed ? "pr-14" : ""
         }`}
       >
@@ -63,12 +66,12 @@ export function AnalysisRow({ session: s, detailed = false }: AnalysisRowProps) 
             <span className="sr-only"> questions asked</span>
           </span>
         )}
-        <span className="text-right">
-          <span className={`flex items-center justify-end gap-1.5 text-[12px] font-medium ${st.tone}`}>
+        <span className="mt-1.5 flex items-center gap-2.5 sm:mt-0 sm:block sm:text-right">
+          <span className={`flex items-center sm:justify-end gap-1.5 text-[12px] font-medium ${st.tone}`}>
             <AnalysisStatusMark status={s.status} />
             {st.label}
           </span>
-          <span className="block text-[12px] text-[#8B8B94] tabular-nums">{timeAgo(s.updatedAt)}</span>
+          <span className="sm:block text-[12px] text-[#8B8B94] tabular-nums">{timeAgo(s.updatedAt)}</span>
         </span>
       </Link>
       {detailed && (

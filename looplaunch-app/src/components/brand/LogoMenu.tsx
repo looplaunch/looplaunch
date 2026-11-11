@@ -16,6 +16,8 @@ interface LogoMenuProps {
   note?: ReactNode;
   /** Custom logo to click (defaults to Loopy + the small wordmark) */
   children?: ReactNode;
+  /** Classes for the default wordmark, e.g. "hidden sm:block" where a phone's bar has no room for it */
+  wordmarkClassName?: string;
 }
 
 const noopSubscribe = () => () => {};
@@ -24,7 +26,7 @@ const OPTION =
   "group w-full flex items-center gap-3 px-4 py-3.5 rounded-[14px] bg-[#1C1C21] hover:bg-[#232329] active:scale-[0.99] text-left transition cursor-pointer";
 
 /** The Loop Launch logo. Clicking it asks where to go: the home page, or a fresh analysis. */
-export function LogoMenu({ note, children }: LogoMenuProps) {
+export function LogoMenu({ note, children, wordmarkClassName = "" }: LogoMenuProps) {
   const router = useRouter();
   const pathname = usePathname();
   const user = useAuthUser();
@@ -145,12 +147,12 @@ export function LogoMenu({ note, children }: LogoMenuProps) {
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-label="Loop Launch menu"
-        className="flex items-center gap-2 rounded-lg hover:opacity-90 active:scale-[0.97] transition cursor-pointer"
+        className="flex shrink-0 items-center gap-2 rounded-lg hover:opacity-90 active:scale-[0.97] transition cursor-pointer"
       >
         {children ?? (
           <>
             <LoopyMascot size={28} mood="still" />
-            <Image src="/logo.png" alt="Loop Launch" width={96} height={32} className="h-5 w-auto object-contain" priority />
+            <Image src="/logo.png" alt="Loop Launch" width={96} height={32} className={`h-5 w-auto object-contain ${wordmarkClassName}`} priority />
           </>
         )}
       </button>

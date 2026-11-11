@@ -30,7 +30,7 @@ export function WaitlistHero() {
   return (
     <section
       id="hero-section"
-      className="relative flex min-h-[92vh] flex-col items-center overflow-hidden bg-black px-6 pt-16 pb-12 text-text-primary"
+      className="relative flex min-h-[92svh] flex-col items-center overflow-hidden bg-black px-6 pt-16 pb-12 text-text-primary"
     >
       <GradientASCII
         colors={ASCII_COLORS}

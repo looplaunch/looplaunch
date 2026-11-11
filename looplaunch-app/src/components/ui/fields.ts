@@ -1,8 +1,11 @@
 /** App form styles: 40px fields with labels above, one white primary, a dark secondary, an outlined danger. */
 
-/** Add the right padding per field: pr-3.5, or pr-10 when a button sits inside it. */
+/**
+ * Add the right padding per field: pr-3.5, or pr-10 when a button sits inside it.
+ * The text is 16px on touch screens: iOS zooms the whole page when a focused field is any smaller.
+ */
 export const FIELD =
-  "w-full h-10 rounded-[10px] bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] focus:border-[#8B5CF6] focus:shadow-[0_0_0_4px_rgba(139,92,246,0.16)] pl-3.5 text-[15px] text-[#F4F4F5] placeholder:text-[#8B8B94] outline-none transition-[border-color,box-shadow] duration-200 disabled:opacity-60";
+  "w-full h-10 rounded-[10px] bg-[#1C1C21] border border-[#2E2E35] hover:border-[#3F3F48] focus:border-[#8B5CF6] focus:shadow-[0_0_0_4px_rgba(139,92,246,0.16)] pl-3.5 text-[15px] pointer-coarse:text-[16px] text-[#F4F4F5] placeholder:text-[#8B8B94] outline-none transition-[border-color,box-shadow] duration-200 disabled:opacity-60";
 
 export const LABEL = "block text-[14px] font-medium text-[#D4D4D8] mb-2";
 

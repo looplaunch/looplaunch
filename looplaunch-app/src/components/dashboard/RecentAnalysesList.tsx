@@ -33,7 +33,7 @@ export function RecentAnalysesList({ sessions }: { sessions: SessionSummary[] })
         const s = sessions[index];
         const st = statusText(s);
         return (
-          <span className="grid w-full grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_120px_120px] items-center gap-x-4">
+          <span className="grid w-full grid-cols-1 sm:grid-cols-[minmax(0,1fr)_120px_120px] items-center gap-x-4 py-0.5 sm:py-0">
             <span className="min-w-0">
               <span className="block text-[14px] font-medium truncate">{s.companyName}</span>
               <span className="block text-[12px] text-[#8B8B94] truncate">
@@ -43,12 +43,12 @@ export function RecentAnalysesList({ sessions }: { sessions: SessionSummary[] })
             <span className="hidden sm:block">
               <PipelineStrip status={s.status} />
             </span>
-            <span className="text-right">
-              <span className={`flex items-center justify-end gap-1.5 text-[12px] font-medium ${st.tone}`}>
+            <span className="mt-1.5 flex items-center gap-2.5 sm:mt-0 sm:block sm:text-right">
+              <span className={`flex items-center sm:justify-end gap-1.5 text-[12px] font-medium ${st.tone}`}>
                 <AnalysisStatusMark status={s.status} delay={300 + index * 90} />
                 {st.label}
               </span>
-              <span className="block text-[12px] text-[#8B8B94] tabular-nums">{timeAgo(s.updatedAt)}</span>
+              <span className="sm:block text-[12px] text-[#8B8B94] tabular-nums">{timeAgo(s.updatedAt)}</span>
             </span>
           </span>
         );

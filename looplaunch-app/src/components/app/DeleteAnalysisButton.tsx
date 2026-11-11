@@ -51,7 +51,7 @@ export function DeleteAnalysisButton({ sessionId, companyName, className = "" }:
               setOpen(true);
             }}
             aria-label={`Delete the analysis of ${companyName}`}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[#8B8B94] hover:text-[#F87171] hover:bg-[#7F1D1D]/25 active:scale-90 transition cursor-pointer"
+            className="w-8 h-8 pointer-coarse:w-10 pointer-coarse:h-10 rounded-full flex items-center justify-center text-[#8B8B94] hover:text-[#F87171] hover:bg-[#7F1D1D]/25 active:scale-90 transition cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
           </button>

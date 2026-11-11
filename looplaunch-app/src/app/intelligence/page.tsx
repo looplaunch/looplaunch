@@ -52,6 +52,14 @@ const STAGE_LABELS: Record<PipelineStatus, string> = {
 /** How a new message arrives in the conversation. */
 const ARRIVE = { duration: 0.32, ease: [0.22, 1, 0.36, 1] } as const;
 
+/** The two views a phone or tablet switches between; from desktop width up both show side by side. */
+const VIEWS = [
+  ["chat", "Strategy"],
+  ["intel", "Search intel"],
+] as const;
+type View = (typeof VIEWS)[number][0];
+const VIEW_SLIDE = { type: "spring", stiffness: 420, damping: 36 } as const;
+
 /** The first strategy is generated automatically as soon as research finishes. */
 const sevenDayPrompt = (company: string) =>
   `Build a prioritized 7-Day execution strategy for ${company}. Focus on fast customer traction, positioning that fits how its buyers really shop, short-form organic content, and the quickest ways to reach those buyers. Fit every step to this kind of business.`;
@@ -113,6 +121,23 @@ function IntelligencePageContent() {
   const [error, setError] = useState("");
   const [latestStreamingMsgId, setLatestStreamingMsgId] = useState<string | null>(null);
   const [mindMapIndex, setMindMapIndex] = useState<number | null>(null);
+  // Below desktop width the conversation and the search intel take turns instead of sitting side by side.
+  const [view, setView] = useState<View>("chat");
+  // Each view keeps its own place on the page, so going to the search intel and back doesn't lose your spot.
+  const viewScroll = useRef<Record<View, number>>({ chat: 0, intel: 0 });
+  const viewMounted = useRef(false);
+  const switchView = (next: View) => {
+    if (next === view) return;
+    viewScroll.current[view] = window.scrollY;
+    setView(next);
+  };
+  useEffect(() => {
+    if (!viewMounted.current) {
+      viewMounted.current = true;
+      return;
+    }
+    window.scrollTo({ top: viewScroll.current[view], behavior: "instant" });
+  }, [view]);
   const user = useAuthUser();
   const claimedRef = useRef<string | null>(null);
 
@@ -239,6 +264,7 @@ function IntelligencePageContent() {
     }
     const questionText = (explicitQuestion || question).trim();
     if (!questionText || !sessionId || isAsking) return;
+    setView("chat");
 
     const userMsgId = `user-${Date.now()}`;
     const optimisticUserMsg: ChatMessage = {
@@ -401,7 +427,7 @@ function IntelligencePageContent() {
   // ─── No Session ID Fallback ───
   if (!sessionId) {
     return (
-      <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-4">
+      <div className="min-h-svh bg-[#09090B] text-[#F4F4F5] flex items-center justify-center p-4">
         <div className="w-full max-w-[400px] rounded-[20px] bg-[#111114] p-6 sm:p-8">
           <LoopyMascot size={44} />
           <h1 className="mt-4 text-[22px] leading-tight font-semibold tracking-[-0.01em]">No analysis open</h1>
@@ -424,12 +450,13 @@ function IntelligencePageContent() {
   return (
     <MotionConfig reducedMotion="user">
     <PageTransition>
-    <div className="min-h-screen bg-[#09090B] text-[#F4F4F5] flex flex-col font-sans selection:bg-[#8B5CF6]/20 selection:text-[#F4F4F5]">
+    <div className="min-h-svh bg-[#09090B] text-[#F4F4F5] flex flex-col font-sans selection:bg-[#8B5CF6]/20 selection:text-[#F4F4F5]">
       {/* ─── Header ─── */}
       <header className="sticky top-0 z-40 h-14 bg-[#09090B] border-b border-[#1C1C21]" style={APP_HEADER_STYLE}>
         <div className="h-full mx-auto max-w-[1148px] px-4 sm:px-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <LogoMenu
+            wordmarkClassName="hidden sm:block"
             note={
               user === null ? (
                 <>
@@ -450,7 +477,7 @@ function IntelligencePageContent() {
               <span className="ll-swap text-[14px] text-[#3F3F48]" aria-hidden="true">
                 /
               </span>
-              <span key={companyName} className="ll-swap text-[14px] font-medium text-[#F4F4F5] truncate max-w-[200px] sm:max-w-[320px]">
+              <span key={companyName} className="ll-swap text-[14px] font-medium text-[#F4F4F5] truncate sm:max-w-[320px]">
                 {companyName}
               </span>
             </>
@@ -458,7 +485,7 @@ function IntelligencePageContent() {
         </div>
 
         {/* While anything is running, say what; when it's done the header stays quiet */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0 whitespace-nowrap">
           {(showInitialWait || (status && status.status !== "ready" && status.status !== "error")) && (
             <div className="flex items-center gap-2 text-[13px] text-[#B4B4BC]">
               <span className="w-3.5 h-3.5 border-2 border-[#B4B4BC] border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
@@ -562,8 +589,33 @@ function IntelligencePageContent() {
 
         {/* ─── Conversational Stream / Initial Selection ─── */}
         {showConversation && status && (
-          <div className="flex-1 flex flex-col lg:flex-row gap-6 pt-4 pb-24 items-start">
-            <div className="flex-1 flex flex-col w-full min-w-0">
+          <div className="flex-1 flex flex-col">
+          {/* Phones and tablets: one view at a time, switched here. The bar stays under the header while you scroll. */}
+          {status.searchIntel && (
+            <div className="lg:hidden sticky short:static top-14 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-[#09090B]">
+              <div role="tablist" aria-label="What to show" className="grid grid-cols-2 gap-1 p-1 rounded-full bg-[#17171B]">
+                {VIEWS.map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === id}
+                    onClick={() => switchView(id)}
+                    className={`relative h-9 rounded-full text-[14px] font-medium transition-colors duration-200 cursor-pointer ${
+                      view === id ? "text-[#09090B]" : "text-[#B4B4BC] hover:text-[#F4F4F5]"
+                    }`}
+                  >
+                    {view === id && (
+                      <motion.span layoutId="analysis-view" transition={VIEW_SLIDE} className="absolute inset-0 rounded-full bg-[#F4F4F5]" aria-hidden="true" />
+                    )}
+                    <span className="relative">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex-1 flex flex-col lg:flex-row gap-6 pt-2 lg:pt-4 pb-24 items-start">
+            <div className={`flex-1 flex-col w-full min-w-0 ${view === "intel" ? "hidden lg:flex" : "flex"}`}>
             {!hasAnswer ? (
               /* ─── First strategy failed: let the user retry ─── */
               <div className="pt-16 pb-32 flex flex-col items-center text-center max-w-md mx-auto w-full">
@@ -617,7 +669,7 @@ function IntelligencePageContent() {
                         className="flex justify-end pt-2"
                       >
                         <div className="bg-[#1C1C21] text-[#F4F4F5] rounded-2xl rounded-tr-md px-4 py-2.5 max-w-[85%] sm:max-w-[78%]">
-                          <p className="text-[15px] leading-relaxed font-normal whitespace-pre-wrap">
+                          <p className="text-[15px] leading-relaxed font-normal whitespace-pre-wrap [overflow-wrap:anywhere]">
                             {msg.content}
                           </p>
                         </div>
@@ -686,11 +738,11 @@ function IntelligencePageContent() {
 
                             <div className="space-y-2">
                               {msg.evidence.map((ev, ei) => (
-                                <div key={ei} className="bg-[#111114] rounded-[14px] px-4 py-3 text-[13px] space-y-1">
+                                <div key={ei} className="bg-[#111114] rounded-[14px] px-4 py-3 text-[13px] space-y-1 [overflow-wrap:anywhere]">
                                   <p className="text-[#D4D4D8] leading-relaxed">{ev.insight}</p>
                                   {ev.url ? (
-                                    <div className="flex items-center gap-1 text-[12px] text-[#8B8B94]">
-                                      <span>Source:</span>
+                                    <div className="flex items-center gap-1 min-w-0 text-[12px] text-[#8B8B94]">
+                                      <span className="shrink-0">Source:</span>
                                       <a
                                         href={ev.url}
                                         target="_blank"
@@ -724,7 +776,7 @@ function IntelligencePageContent() {
                                   href={s.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[#1C1C21] hover:bg-[#232329] text-[13px] text-[#B4B4BC] hover:text-[#F4F4F5] transition-colors max-w-[280px]"
+                                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[#1C1C21] hover:bg-[#232329] text-[13px] text-[#B4B4BC] hover:text-[#F4F4F5] transition-colors max-w-full sm:max-w-[280px]"
                                   title={`${s.title} · ${s.url}`}
                                 >
                                   <span className="truncate">{s.title || s.source}</span>
@@ -797,8 +849,10 @@ function IntelligencePageContent() {
                 onAsk={(q) => handleAsk(q)}
                 isAsking={isAsking}
                 onUnlock={() => askToLogIn("intel")}
+                hiddenBelowLg={view === "chat"}
               />
             )}
+          </div>
           </div>
         )}
 
@@ -877,7 +931,7 @@ function IntelligencePageContent() {
                     aria-label={`Ask Loopy about ${companyName}`}
                     placeholder="Ask Loopy about this analysis…"
                     disabled={isAsking}
-                    className="w-full bg-transparent text-[#F4F4F5] text-[15px] placeholder:text-[#8B8B94] px-4 py-3 pr-14 resize-none overflow-y-hidden focus:outline-none min-h-[48px] max-h-[180px] leading-relaxed"
+                    className="w-full bg-transparent text-[#F4F4F5] text-[15px] pointer-coarse:text-[16px] placeholder:text-[#8B8B94] px-4 py-3 pr-14 resize-none overflow-y-hidden focus:outline-none min-h-[48px] max-h-[180px] leading-relaxed"
                   />
 
                   {/* React Bits SlingButton: tap to send, or pull it back like a slingshot and let go */}
@@ -899,7 +953,7 @@ function IntelligencePageContent() {
                   </span>
                 </div>
 
-                <p className="text-[12px] text-[#8B8B94] mt-1.5 px-1 text-center sm:text-left">Press Enter to send, Shift + Enter for a new line</p>
+                <p className="pointer-coarse:hidden text-[12px] text-[#8B8B94] mt-1.5 px-1 text-center sm:text-left">Press Enter to send, Shift + Enter for a new line</p>
               </>
             )}
           </div>
@@ -944,7 +998,7 @@ export default function IntelligencePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#09090B] flex items-center justify-center">
+        <div className="min-h-svh bg-[#09090B] flex items-center justify-center">
           <div className="w-5 h-5 border-2 border-[#A1A1AA] border-t-transparent rounded-full animate-spin" />
         </div>
       }

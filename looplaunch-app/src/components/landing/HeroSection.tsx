@@ -260,7 +260,7 @@ export function HeroSection({ variant = "landing" }: HeroSectionProps) {
     <section
       id="hero-section"
       className={`relative flex flex-col justify-between items-center px-6 overflow-hidden bg-black text-text-primary ${
-        variant === "app" ? "min-h-[calc(100vh-3.5rem)] pt-10 pb-10" : "min-h-[92vh] pt-16 pb-12"
+        variant === "app" ? "min-h-[calc(100svh-3.5rem)] pt-10 pb-10" : "min-h-[92svh] pt-16 pb-12"
       }`}
     >
       {/* Layer 0: SideRays */}
@@ -384,7 +384,7 @@ export function HeroSection({ variant = "landing" }: HeroSectionProps) {
                     placeholder="yourcompany.com"
                     spellCheck={false}
                     autoComplete="off"
-                    className="flex-1 bg-transparent text-text-primary text-base sm:text-lg placeholder:text-text-placeholder focus:outline-none border-0 outline-none ring-0 p-0"
+                    className="flex-1 min-w-0 bg-transparent text-text-primary text-base sm:text-lg placeholder:text-text-placeholder focus:outline-none border-0 outline-none ring-0 p-0"
                   />
 
                   <button
@@ -454,7 +454,7 @@ export function HeroSection({ variant = "landing" }: HeroSectionProps) {
                       placeholder={currentStep.placeholder}
                       spellCheck={false}
                       autoComplete="off"
-                      className="flex-1 bg-transparent text-text-primary text-base sm:text-lg placeholder:text-text-placeholder focus:outline-none border-0 outline-none ring-0 p-0"
+                      className="flex-1 min-w-0 bg-transparent text-text-primary text-base sm:text-lg placeholder:text-text-placeholder focus:outline-none border-0 outline-none ring-0 p-0"
                     />
                     <button
                       onClick={handleTextSubmit}
@@ -484,7 +484,7 @@ export function HeroSection({ variant = "landing" }: HeroSectionProps) {
                         }
                       }}
                       placeholder={currentStep.placeholder}
-                      className="w-full bg-transparent text-text-primary text-sm sm:text-base placeholder:text-text-placeholder focus:outline-none border-0 outline-none ring-0 p-0 resize-none leading-relaxed"
+                      className="w-full bg-transparent text-text-primary text-base placeholder:text-text-placeholder focus:outline-none border-0 outline-none ring-0 p-0 resize-none leading-relaxed"
                     />
                     <div className="flex justify-between items-center pt-2 text-[11px] text-text-tertiary">
                       <span>Press ⌘+Enter to continue</span>

@@ -70,9 +70,10 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
         title="Profile"
         description="How you appear in Loop Launch, and the business we fill in when you start an analysis."
       >
-        <div className="flex items-center gap-4">
+        {/* On the narrowest phones the choices drop under the picture instead of running off the card */}
+        <div className="flex flex-wrap items-center gap-4">
           <Avatar profile={preview} size={64} />
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0 max-w-full">
             {profile.googlePhotoUrl && (
               <RubberSegment
                 items={[
@@ -91,7 +92,7 @@ export function ProfileForm({ profile }: { profile: ProfileInfo }) {
               />
             )}
             {!usePhoto && (
-              <div className="flex items-center gap-2.5" role="radiogroup" aria-label="Avatar colour">
+              <div className="flex flex-wrap items-center gap-2.5" role="radiogroup" aria-label="Avatar colour">
                 {AVATAR_COLORS.map((c) => (
                   <button
                     key={c}

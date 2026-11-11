@@ -104,7 +104,7 @@ export function MarkdownContent({
 
   return (
     <div
-      className={`space-y-3.5 text-[#D4D4D8] text-[15px] leading-[1.7] font-normal ${className}`}
+      className={`space-y-3.5 text-[#D4D4D8] text-[15px] leading-[1.7] font-normal [overflow-wrap:anywhere] ${className}`}
     >
       {blocks.map((block, idx) => {
         const trimmed = block.trim();
@@ -191,7 +191,7 @@ export function MarkdownContent({
                 return (
                   <li key={li} className="flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#71717A] shrink-0 mt-2 opacity-80" />
-                    <span className="flex-1">{renderInline(itemText)}</span>
+                    <span className="flex-1 min-w-0">{renderInline(itemText)}</span>
                   </li>
                 );
               })}
@@ -211,7 +211,7 @@ export function MarkdownContent({
                     <span className="text-[13px] font-medium text-[#8B8B94] tabular-nums shrink-0 w-4 text-right">
                       {num}.
                     </span>
-                    <span className="flex-1">{renderInline(itemText)}</span>
+                    <span className="flex-1 min-w-0">{renderInline(itemText)}</span>
                   </li>
                 );
               })}

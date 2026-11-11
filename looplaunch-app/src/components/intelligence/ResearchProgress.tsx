@@ -43,9 +43,9 @@ export function ResearchProgress({ status, writing, companyName }: ResearchProgr
   if (newlyRunning.length) setWatched([...watched, ...newlyRunning]);
 
   return (
-    <ol className="flex flex-col items-start gap-2" aria-label="Research progress">
+    <ol className="flex flex-col items-start gap-2 min-w-0" aria-label="Research progress">
       {stages.map((stage, i) => (
-        <li key={stage.name}>
+        <li key={stage.name} className="max-w-full">
           <CallChip
             icon={stage.icon}
             name={stage.name}
@@ -65,7 +65,7 @@ export function ResearchProgress({ status, writing, companyName }: ResearchProgr
           />
         </li>
       ))}
-      <li>
+      <li className="max-w-full">
         <CallChip
           icon={<PenLine size={15} strokeWidth={1.8} />}
           name="Write"

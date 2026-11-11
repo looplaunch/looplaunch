@@ -18,6 +18,8 @@ interface IntelligenceSidebarProps {
   isAsking?: boolean;
   /** Opens the login pop-up from the locked sidebar. */
   onUnlock?: () => void;
+  /** Below desktop width the page shows the conversation or this panel, not both: true while it's the conversation's turn. */
+  hiddenBelowLg?: boolean;
 }
 
 type Tab = "questions" | "ads" | "competitors";
@@ -171,7 +173,7 @@ function SearchAdCard({ ad }: { ad: KeywordAdResult }) {
   );
 }
 
-export function IntelligenceSidebar({ intel, companyName, sessionId, onAsk, isAsking = false, onUnlock }: IntelligenceSidebarProps) {
+export function IntelligenceSidebar({ intel, companyName, sessionId, onAsk, isAsking = false, onUnlock, hiddenBelowLg = false }: IntelligenceSidebarProps) {
   const [tab, setTab] = useState<Tab>("questions");
   const listRef = useRef<HTMLDivElement>(null);
   const [openQuestion, setOpenQuestion] = useState<string | null>(null);
@@ -238,7 +240,11 @@ export function IntelligenceSidebar({ intel, companyName, sessionId, onAsk, isAs
 
   return (
     <MotionConfig reducedMotion="user">
-    <aside className="w-full lg:w-84 xl:w-96 shrink-0 flex flex-col rounded-[20px] bg-[#111114] overflow-hidden lg:sticky lg:top-20 max-h-[calc(100vh-6rem)]">
+    <aside
+      className={`w-full lg:w-84 xl:w-96 shrink-0 flex-col rounded-[20px] bg-[#111114] overflow-hidden [overflow-wrap:anywhere] lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] ${
+        hiddenBelowLg ? "hidden lg:flex" : "flex"
+      }`}
+    >
       {/* Header */}
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
@@ -285,7 +291,7 @@ export function IntelligenceSidebar({ intel, companyName, sessionId, onAsk, isAs
       {intel.locked ? (
         <LockedIntel companyName={companyName} counts={counts} onUnlock={onUnlock} />
       ) : (
-        <div ref={listRef} className="relative flex-1 overflow-y-auto px-4 pb-4 pt-1 custom-scrollbar">
+        <div ref={listRef} className="relative flex-1 lg:overflow-y-auto px-4 pb-4 pt-1 custom-scrollbar">
           {/* popLayout: the old list steps out of the flow and fades while the new one arrives, so nothing waits on it */}
           <AnimatePresence mode="popLayout" initial={false}>
           <motion.div key={tab} {...SWAP} className="relative space-y-6">

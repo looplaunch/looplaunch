@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { BriefPanel } from "./BriefPanel";
@@ -19,6 +19,29 @@ import {
   THIRTY_DAY_GOAL_OPTIONS,
 } from "@/lib/onboarding/types";
 import { isValidUrl, normalizeUrl } from "@/lib/onboarding/validation";
+
+/** The slider is drawn at a fixed pixel width; this is the most it gets when the column has room. */
+const SLIDER_WIDTH = 340;
+
+/**
+ * The width for a fixed-width control inside the element the returned ref is put on: `max`, or
+ * the element's own width when that is narrower (a small phone).
+ */
+function useFitWidth(max: number) {
+  const [width, setWidth] = useState(max);
+  const ref = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el) return;
+      const fit = () => setWidth(Math.min(max, Math.floor(el.clientWidth)));
+      fit();
+      const watcher = new ResizeObserver(fit);
+      watcher.observe(el);
+      return () => watcher.disconnect();
+    },
+    [max]
+  );
+  return [ref, width] as const;
+}
 
 /** Maps single-select step keys to their option arrays */
 const SINGLE_SELECT_OPTIONS: Record<string, string[]> = {
@@ -55,6 +78,7 @@ export function QuestionFlow() {
 
   // Intelligence pipeline submission state
   const [submitError, setSubmitError] = useState("");
+  const [sliderRef, sliderWidth] = useFitWidth(SLIDER_WIDTH);
   const startedSession = useRef<string | null>(null);
 
   // ─── Website step state (step 1) ───
@@ -342,7 +366,8 @@ export function QuestionFlow() {
                 className="flex-1 min-w-0 bg-transparent text-[17px] text-[#F4F4F5] placeholder:text-[#8B8B94] focus:outline-none border-0 outline-none ring-0 p-0"
               />
               <button onClick={handleWebsiteSubmit} className={`${primaryButton} shrink-0 h-11`}>
-                Analyse my site
+                {/* On the narrowest phones the shorter label leaves room to see the address being typed */}
+                Analyse<span className="max-[400px]:hidden">&nbsp;my site</span>
               </button>
             </div>
             {websiteError ? (
@@ -520,14 +545,14 @@ export function QuestionFlow() {
             })}
           </div>
 
-          <div className="flex flex-col gap-3 items-start">
+          <div ref={sliderRef} className="flex flex-col gap-3 items-start w-full">
             <SlideCommit
               label="Slide to start the research"
               doneLabel="Research started"
               errorLabel="Couldn't start it"
               onConfirm={startResearch}
               onDone={openStartedAnalysis}
-              width={340}
+              width={sliderWidth}
               height={56}
               radius={999}
               holdMs={600}
@@ -559,7 +584,7 @@ export function QuestionFlow() {
   );
 
   return (
-    <section id="hero-section" className="relative bg-[#09090B] text-text-primary min-h-[calc(100vh-3.5rem)]">
+    <section id="hero-section" className="relative bg-[#09090B] text-text-primary min-h-[calc(100svh-3.5rem)]">
       <div className="mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 pb-16 sm:pb-24 grid lg:grid-cols-12 gap-x-8 gap-y-12 items-start">
         {/* Left: each question in turn */}
         <div className="lg:col-span-5 min-w-0">

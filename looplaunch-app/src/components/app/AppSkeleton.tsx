@@ -14,7 +14,7 @@ export function AppSkeleton({
 }) {
   return (
     <PageTransition>
-    <div className="min-h-screen bg-[#09090B]" aria-busy="true" aria-label="Loading">
+    <div className="min-h-svh bg-[#09090B]" aria-busy="true" aria-label="Loading">
       <AppNav profile={undefined} active={active} />
       <div className="mx-auto max-w-[1148px] px-4 sm:px-6 pt-10 sm:pt-14 animate-pulse">
         <div className="h-8 w-56 rounded-lg bg-[#17171B]" />

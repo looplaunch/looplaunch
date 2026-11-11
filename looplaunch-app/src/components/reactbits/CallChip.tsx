@@ -236,14 +236,15 @@ const CallChip: React.FC<CallChipProps> = ({
           <HugeiconsIcon icon={RefreshIcon} size={iconSize} strokeWidth={2} />
         </span>
       </span>
-      <span className="relative font-medium" aria-hidden="true">
+      {/* Patched: in a narrow card the argument shortens with an ellipsis; the name and the clock keep their width. */}
+      <span className="relative flex-none font-medium" aria-hidden="true">
         {name}
       </span>
-      <span className="relative opacity-[0.72]" aria-hidden="true">
+      <span className="relative min-w-0 truncate opacity-[0.72]" aria-hidden="true">
         {argument}
       </span>
       {showTimer ? (
-        <span ref={timerRef} className="relative min-w-[6ch] text-right tabular-nums opacity-50" aria-hidden="true">
+        <span ref={timerRef} className="relative min-w-[6ch] flex-none text-right tabular-nums opacity-50" aria-hidden="true">
           0 ms
         </span>
       ) : null}
