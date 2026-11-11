@@ -1,9 +1,13 @@
 /**
  * POST /api/waitlist
  *
- * Body: { email, firstName, consent, run?, company? }
- * Adds someone to the Supabase `waitlist` table (migrations 006 and 008). Public: this is the
+ * Body: { email, firstName, consent, role?, brand?, run?, company? }
+ * Adds someone to the Supabase `waitlist` table (migrations 006, 008 and 009). Public: this is the
  * only thing visitors can do while Loop Launch is invite-only.
+ *
+ * `role` (Founder, CEO… or their own words) and `brand` (where the brand lives online: a website,
+ * Instagram, LinkedIn…) are required to join. Someone already on the list who is only saving a
+ * new time can leave them out; if their row has none yet, the ones sent fill it in.
  *
  * `run` is a finished game of Loopy's snake, { seed, turns }. The server replays it to get the
  * time, so a time can't be made up, and keeps each person's best for the leaderboard.
@@ -14,7 +18,8 @@
 
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/db/supabase";
-import { BoardNotSetUpError, joinWaitlist, waitlistStore } from "@/lib/waitlist/board";
+import { BoardNotSetUpError, MissingDetailsError, joinWaitlist, waitlistStore } from "@/lib/waitlist/board";
+import { cleanBrandLink, cleanRole, parseDetails } from "@/lib/waitlist/details";
 import { cleanFirstName, isBlockedName } from "@/lib/waitlist/names";
 import { parseRun, replay } from "@/lib/waitlist/snake";
 import type { JoinResponse } from "@/lib/waitlist/types";
@@ -52,6 +57,8 @@ export async function POST(request: Request) {
     consent?: unknown;
     run?: unknown;
     company?: unknown;
+    role?: unknown;
+    brand?: unknown;
   };
   const firstName = cleanFirstName(body.firstName);
 
@@ -79,6 +86,14 @@ export async function POST(request: Request) {
   }
   if (body.consent !== true) return badRequest("Please tick the box so we can email you when we launch.");
 
+  // Sent but unusable is an error to fix; not sent at all is fine for someone already on the list.
+  const sentDetails = body.role !== undefined || body.brand !== undefined;
+  const details = sentDetails ? parseDetails(body.role, body.brand) : null;
+  if (sentDetails && !details) {
+    if (!cleanRole(body.role)) return badRequest("Please pick your role, or type it in.");
+    if (!cleanBrandLink(body.brand)) return badRequest("Please add a link to your brand, like yourbrand.com or instagram.com/yourbrand.");
+  }
+
   // A run that doesn't replay to a finish still lets the person join; it just doesn't get a time.
   let timeMs: number | null = null;
   let runRejected = false;
@@ -98,7 +113,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const joined = await joinWaitlist(store, { email, firstName, timeMs, source, userAgent });
+    const joined = await joinWaitlist(store, { email, firstName, timeMs, source, userAgent, details });
     const response: JoinResponse = {
       ok: true,
       alreadyJoined: joined.alreadyJoined,
@@ -114,6 +129,13 @@ export async function POST(request: Request) {
     };
     return NextResponse.json(response);
   } catch (error) {
+    if (error instanceof MissingDetailsError) {
+      // The page then shows the role and brand fields (this browser thought it had already joined).
+      return NextResponse.json(
+        { error: "Add your role and where your brand lives online to join.", needsDetails: true },
+        { status: 400 }
+      );
+    }
     if (!(error instanceof BoardNotSetUpError)) {
       console.error("[Waitlist] Join failed:", error instanceof Error ? error.message : error);
       return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });

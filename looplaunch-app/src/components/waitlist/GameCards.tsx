@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { animate, motion, useReducedMotion, type Variants } from "motion/react";
+import { AnimatePresence, animate, motion, useReducedMotion, type Variants } from "motion/react";
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { RollingCount } from "@/components/dashboard/RollingCount";
 import { FIRST_NAME_MAX, cleanFirstName } from "@/lib/waitlist/names";
+import { BRAND_LINK_MAX, ROLE_MAX, ROLE_OPTIONS, cleanBrandLink, cleanRole } from "@/lib/waitlist/details";
 import { TARGET, formatTime, type FinishedRun } from "@/lib/waitlist/snake";
 import type { Board, JoinResponse } from "@/lib/waitlist/types";
 import { bestRank, rankOn } from "./WaitlistGame";
@@ -20,6 +21,8 @@ const ghostButton =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-4 text-sm font-medium text-text-primary transition-colors hover:border-white/40";
 const field =
   "mt-2 h-12 w-full rounded-xl border bg-black/40 px-4 text-base text-text-primary placeholder:text-text-placeholder transition-[border-color,background-color,transform] duration-200 hover:border-white/30 focus:-translate-y-px focus:border-white focus:bg-black/60 disabled:opacity-50";
+const chip =
+  "inline-flex min-h-10 items-center rounded-full border px-3.5 text-sm transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] disabled:opacity-50";
 
 // How long the tick and "You're on the waitlist" stay up before the card moves on.
 const TICK_HOLD_MS = 1900;
@@ -44,15 +47,38 @@ interface JoinFormProps {
   run: FinishedRun | null;
   defaults: { firstName: string; email: string };
   submitLabel: string;
+  /** New to the waitlist: also ask for their role and where their brand lives online. */
+  askDetails: boolean;
   onJoined(result: JoinResponse, email: string): void;
 }
 
-type Errors = { name?: string; email?: string; form?: string };
+type Errors = { name?: string; email?: string; role?: string; brand?: string; form?: string };
 
-/** First name and email. A finished run goes with it, for the server to replay. */
-export function JoinForm({ run, defaults, submitLabel, onJoined }: JoinFormProps) {
+function FieldError({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <motion.span
+      id={id}
+      initial={{ opacity: 0, x: -6 }}
+      animate={{ opacity: 1, x: [-6, 4, -2, 0] }}
+      className="mt-1.5 block text-sm text-[#FCA5A5]"
+    >
+      {children}
+    </motion.span>
+  );
+}
+
+/**
+ * First name and email, and for someone new their role and where their brand lives online.
+ * A finished run goes with it, for the server to replay.
+ */
+export function JoinForm({ run, defaults, submitLabel, askDetails, onJoined }: JoinFormProps) {
   const [firstName, setFirstName] = useState(defaults.firstName);
   const [email, setEmail] = useState(defaults.email);
+  // The server can ask for the details too, when this browser thought it had already joined.
+  const [showDetails, setShowDetails] = useState(askDetails);
+  const [roleChoice, setRoleChoice] = useState("");
+  const [ownRole, setOwnRole] = useState("");
+  const [brand, setBrand] = useState("");
   const [honeypot, setHoneypot] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [phase, setPhase] = useState<JoinPhase>("idle");
@@ -64,7 +90,11 @@ export function JoinForm({ run, defaults, submitLabel, onJoined }: JoinFormProps
   }, [onJoined]);
   const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const roleRef = useRef<HTMLButtonElement>(null);
+  const ownRoleRef = useRef<HTMLInputElement>(null);
+  const brandRef = useRef<HTMLInputElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
+  const role = roleChoice === "Other" ? ownRole : roleChoice;
 
   useEffect(() => {
     const first = !defaults.firstName ? nameRef.current : !defaults.email ? emailRef.current : submitRef.current;
@@ -81,9 +111,17 @@ export function JoinForm({ run, defaults, submitLabel, onJoined }: JoinFormProps
     if (!name) next.name = "Add your first name.";
     if (!mail) next.email = "Add your email.";
     else if (!EMAIL_PATTERN.test(mail)) next.email = "That email doesn't look right.";
+    if (showDetails) {
+      if (!roleChoice) next.role = "Pick your role.";
+      else if (!cleanRole(role)) next.role = "Type your role.";
+      if (!brand.trim()) next.brand = "Add a link to your brand.";
+      else if (!cleanBrandLink(brand)) next.brand = "Add a link like yourbrand.com or instagram.com/yourbrand, or an @handle.";
+    }
     setErrors(next);
     if (next.name) return nameRef.current?.focus();
     if (next.email) return emailRef.current?.focus();
+    if (next.role) return (roleChoice === "Other" ? ownRoleRef : roleRef).current?.focus();
+    if (next.brand) return brandRef.current?.focus();
 
     setPhase("sending");
     try {
@@ -95,11 +133,13 @@ export function JoinForm({ run, defaults, submitLabel, onJoined }: JoinFormProps
           email: mail,
           // Joining the waitlist is the request to hear about the launch, so it carries that consent.
           consent: true,
+          ...(showDetails ? { role: cleanRole(role), brand: brand.trim() } : {}),
           company: honeypot,
           run: run ? { seed: run.seed, turns: run.turns } : undefined,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as Partial<JoinResponse> & { error?: string };
+      const data = (await res.json().catch(() => ({}))) as Partial<JoinResponse> & { error?: string; needsDetails?: boolean };
+      if (data.needsDetails) setShowDetails(true);
       if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't save that. Check your connection and try again.");
       // Show the tick first; the card moves on once it has landed.
       pending.current = { result: data as JoinResponse, email: mail };
@@ -193,6 +233,99 @@ export function JoinForm({ run, defaults, submitLabel, onJoined }: JoinFormProps
         )}
       </motion.label>
 
+      {showDetails && (
+        <>
+          <motion.fieldset variants={rise} className="mt-4" aria-describedby={errors.role ? "join-role-error" : undefined}>
+            <legend className="text-sm font-medium text-text-secondary">Your role</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {ROLE_OPTIONS.map((option, i) => {
+                const picked = roleChoice === option;
+                return (
+                  <button
+                    key={option}
+                    ref={i === 0 ? roleRef : undefined}
+                    type="button"
+                    aria-pressed={picked}
+                    disabled={sending}
+                    onClick={() => {
+                      setRoleChoice(option);
+                      if (errors.role) setErrors((x) => ({ ...x, role: undefined }));
+                      if (option === "Other") setTimeout(() => ownRoleRef.current?.focus(), 60);
+                    }}
+                    className={`${chip} ${
+                      picked
+                        ? "border-white bg-white font-medium text-black"
+                        : "border-white/15 bg-black/40 text-text-secondary hover:border-white/30 hover:text-text-primary"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+            <AnimatePresence initial={false}>
+              {roleChoice === "Other" && (
+                <motion.div
+                  key="own-role"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="overflow-hidden"
+                >
+                  <label className="sr-only" htmlFor="join-own-role">
+                    Your role
+                  </label>
+                  <input
+                    id="join-own-role"
+                    ref={ownRoleRef}
+                    value={ownRole}
+                    disabled={sending}
+                    onChange={(e) => {
+                      setOwnRole(e.target.value);
+                      if (errors.role) setErrors((x) => ({ ...x, role: undefined }));
+                    }}
+                    maxLength={ROLE_MAX}
+                    autoComplete="organization-title"
+                    placeholder="e.g. Head of growth"
+                    className={`${field} ${errors.role ? "border-white" : "border-white/15"}`}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {errors.role && <FieldError id="join-role-error">{errors.role}</FieldError>}
+          </motion.fieldset>
+
+          <motion.label variants={rise} className="mt-4 block">
+            <span className="text-sm font-medium text-text-secondary">Where does your brand live online?</span>
+            <span id="join-brand-hint" className="mt-0.5 block text-xs text-text-tertiary">
+              Your website, Instagram, LinkedIn, Facebook or any other page
+            </span>
+            <input
+              ref={brandRef}
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={brand}
+              disabled={sending}
+              onChange={(e) => {
+                setBrand(e.target.value);
+                if (errors.brand) setErrors((x) => ({ ...x, brand: undefined }));
+              }}
+              autoComplete="url"
+              maxLength={BRAND_LINK_MAX}
+              placeholder="yourbrand.com or @yourbrand"
+              aria-invalid={Boolean(errors.brand)}
+              aria-describedby={errors.brand ? "join-brand-error" : "join-brand-hint"}
+              className={`${field} ${errors.brand ? "border-white" : "border-white/15"}`}
+            />
+            {errors.brand && <FieldError id="join-brand-error">{errors.brand}</FieldError>}
+          </motion.label>
+        </>
+      )}
+
       {/* Honeypot: hidden from people, bots fill it in */}
       <input
         type="text"
@@ -252,7 +385,7 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
         <Rise as="p" className="mt-2 text-text-secondary">
           Get in first. We&apos;ll email you when your access is ready.
         </Rise>
-        <JoinForm run={null} defaults={defaults} submitLabel="Join waitlist" onJoined={onJoined} />
+        <JoinForm run={null} defaults={defaults} submitLabel="Join waitlist" askDetails={!me} onJoined={onJoined} />
         <Rise as="p" className="mt-6 text-sm text-text-secondary">
           Rather earn a spot on the board?{" "}
           <button type="button" onClick={onPlayAgain} className="text-text-primary underline underline-offset-4">
@@ -317,7 +450,7 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
           </Rise>
           <Rise as="p" className="mt-2 text-sm text-text-secondary">
             {!me
-              ? "Add your name and email to join the waitlist and put this time on the board."
+              ? "Tell us a little about you to join the waitlist and put this time on the board."
               : me.bestMs != null
                 ? "It replaces your time on the board."
                 : "You're already on the waitlist. This adds your time to the board."}
@@ -326,6 +459,7 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
             run={run}
             defaults={defaults}
             submitLabel={!me ? "Join waitlist" : me.bestMs != null ? "Save my new best" : "Save my time"}
+            askDetails={!me}
             onJoined={onJoined}
           />
           <Rise>

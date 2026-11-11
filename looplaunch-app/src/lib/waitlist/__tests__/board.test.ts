@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 import { cleanFirstName, isBlockedName } from "../names";
 import { createMemoryStore, joinWaitlist, type WaitlistStore } from "../board";
 
+const DETAILS = { role: "Founder", brandLink: "brand.com", brandPlatform: "website" as const };
+
 const join = (store: WaitlistStore, email: string, firstName: string, timeMs: number | null) =>
-  joinWaitlist(store, { email, firstName, timeMs, source: null, userAgent: null });
+  joinWaitlist(store, { email, firstName, timeMs, source: null, userAgent: null, details: DETAILS });
 
 describe("waitlist leaderboard", () => {
   test("fastest first, equal times in the order they were set", async () => {
