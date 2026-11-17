@@ -10,7 +10,7 @@
  * new time can leave them out; if their row has none yet, the ones sent fill it in.
  *
  * `industry` is optional: one of INDUSTRY_OPTIONS (Fashion, Food & Beverage, Beauty & Personal Care,
- * Something else). Anything else is ignored. Someone already on the list with none gets this one.
+ * Agency, Something else). Anything else is ignored. Someone already on the list with none gets this one.
  *
  * `run` is a finished game of Loopy's snake, { seed, turns }. The server replays it to get the
  * time, so a time can't be made up. Each person gets one go: only their first time is kept.

@@ -407,9 +407,11 @@ For every question, write:
 Reply with JSON only: {"answers": [{"n": 1, "answer": "...", "tip": "..."}]}`;
 
   try {
-    const result = await model.generateContent(prompt);
     type Answer = { n?: number; answer?: string; tip?: string };
-    const raw = parseJsonResponse<{ answers?: Answer[] } | Answer[]>(result.response.text());
+    const raw = await withRetry("answerBuyerQuestions", async () => {
+      const result = await model.generateContent(prompt);
+      return parseJsonResponse<{ answers?: Answer[] } | Answer[]>(result.response.text());
+    });
     return (Array.isArray(raw) ? raw : raw.answers || [])
       .filter((a) => typeof a.n === "number" && a.n >= 1 && a.n <= questions.length && a.answer)
       .map((a) => ({
@@ -506,9 +508,11 @@ Reply with JSON only, at most 12 competitors, strongest first:
 {"competitors": [{"name": "Brand", "domain": "brand.com", "type": "direct", "similarity": 0-100, "why": "One plain sentence from the results: what they sell and why buyers compare them.", "evidence": [1, 4]}]}`;
 
   try {
-    const result = await model.generateContent(prompt);
     // The model returns either {"competitors": [...]} or a bare [...]; accept both.
-    const raw = parseJsonResponse<{ competitors?: Array<Partial<IdentifiedCompetitor>> } | Array<Partial<IdentifiedCompetitor>>>(result.response.text());
+    const raw = await withRetry("identifyCompetitors", async () => {
+      const result = await model.generateContent(prompt);
+      return parseJsonResponse<{ competitors?: Array<Partial<IdentifiedCompetitor>> } | Array<Partial<IdentifiedCompetitor>>>(result.response.text());
+    });
     const list = Array.isArray(raw) ? raw : raw.competitors || [];
     const types = new Set(["direct", "indirect", "marketplace"]);
     const validNumbers = new Set(evidence.map((e) => e.n));

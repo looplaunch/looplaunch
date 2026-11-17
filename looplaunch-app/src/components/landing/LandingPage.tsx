@@ -49,13 +49,12 @@ export function LandingPage() {
 const WAITLIST_NAV = [
   { label: "How it works", id: "how" },
   { label: "What you get", id: "get" },
-  { label: "Who it’s for", id: "who" },
   { label: "FAQ", id: "faq" },
 ];
 
 /**
  * The public landing page while Loop Launch is invite-only: the waitlist hero, then the waitlist
- * sections (why, how, demo, what you get, who it's for, proof, FAQ). Every join button opens
+ * sections (why, how, demo, what you get, proof, FAQ). Every join button opens
  * Loopy's snake over the page (with a skip), which ends in the join form.
  */
 export function WaitlistLandingPage({ signedInEmail }: { signedInEmail?: string | null }) {

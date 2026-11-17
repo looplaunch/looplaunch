@@ -20,7 +20,7 @@
   --nw-fs-eyebrow: 12px;
   --nw-fs-closing: 20px;
   --nw-pad-x: 24px;
-  --nw-sec-y: 96px;
+  --nw-sec-y: 64px;
   --nw-max: 1120px;
   --nw-text-max: 720px;
   --nw-r-card: 16px;
@@ -39,7 +39,7 @@
 @media (min-width: 1024px) {
   .nw {
     --nw-fs-body: 18px;
-    --nw-sec-y: 160px;
+    --nw-sec-y: 96px;
   }
 }
 /* Big monitors: a little more room and type, so the page doesn't shrink into the middle */
@@ -122,14 +122,13 @@
 }
 .nw-head {
   max-width: var(--nw-text-max);
-  margin: 0 auto 64px;
+  margin: 0 auto 48px;
 }
 .nw-head .nw-sub {
   margin-top: 16px;
 }
 .nw-sec {
   padding: var(--nw-sec-y) 0;
-  border-top: 1px solid #151518;
 }
 
 /* Buttons */
@@ -201,27 +200,31 @@
   gap: 40px;
 }
 .nw-pb-row2 {
-  margin-top: 96px;
+  margin-top: 72px;
 }
 .nw-pb-h {
   max-width: 14ch;
+  line-height: 1.25;
 }
+/* The brighter violet: 1px of the brand violet reads as grey on black */
 .nw-asks {
   display: grid;
-  border-top: 1px solid var(--nw-line);
-  border-bottom: 1px solid var(--nw-line);
+  border-top: 1px solid #7c3aed;
+  border-bottom: 1px solid #7c3aed;
 }
 .nw-ask {
   padding: 20px 0;
 }
 .nw-ask + .nw-ask {
-  border-top: 1px solid var(--nw-line);
+  border-top: 1px solid #7c3aed;
 }
+/* Each question on one line, so every answer sits on the same second line */
 .nw-ask-q {
   font-size: clamp(22px, 2.2vw, 28px);
   line-height: 1.2;
   font-weight: 500;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 .nw-ask-a {
   margin-top: 6px;
@@ -327,15 +330,16 @@
   line-height: 1.6;
 }
 @media (min-width: 640px) {
+  /* Columns fit their question (then share the spare room), so "A marketing head?" never wraps */
   .nw-asks {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, auto);
   }
   .nw-ask {
     padding: 24px 20px 24px 0;
   }
   .nw-ask + .nw-ask {
     border-top: 0;
-    border-left: 1px solid var(--nw-line);
+    border-left: 1px solid #7c3aed;
     padding-left: 20px;
   }
 }
@@ -356,7 +360,7 @@
     gap: 64px;
   }
   .nw-pb-row2 {
-    margin-top: 120px;
+    margin-top: 96px;
   }
 }
 
@@ -555,8 +559,13 @@
   scroll-snap-align: start;
   min-height: 220px;
 }
-.nw-card-angle {
+.nw-card-hi {
   border-color: var(--nw-accent);
+}
+@media (hover: hover) {
+  .nw-grid4 .nw-card-hi:hover {
+    border-color: var(--nw-lilac);
+  }
 }
 @media (min-width: 640px) {
   .nw-grid4 {
@@ -596,6 +605,7 @@
   font-size: clamp(40px, 6vw, 72px);
   line-height: 1.02;
   font-variant-numeric: tabular-nums;
+  color: var(--nw-lilac);
 }
 .nw-human-grid .nw-body {
   align-self: center;
@@ -694,43 +704,6 @@
   .nw-compare.nw-lit td.nw-ll {
     border-top-color: var(--nw-accent);
   }
-}
-
-/* ─── Who it's for ─── */
-.nw-chips {
-  list-style: none;
-  padding: 0;
-  margin: 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  max-width: 760px;
-}
-.nw-chip {
-  min-height: 44px;
-  padding: 0 20px;
-  border-radius: 999px;
-  border: 1px solid var(--nw-line);
-  background: transparent;
-  color: var(--nw-text);
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    border-color 0.2s,
-    background-color 0.2s;
-}
-.nw-chip:hover {
-  border-color: var(--nw-accent);
-  background: var(--nw-surface);
-}
-.nw-niche {
-  margin: 28px auto 0;
-  max-width: var(--nw-text-max);
-}
-.nw-else {
-  margin-top: 16px;
 }
 
 /* ─── Tips ─── */
@@ -917,8 +890,6 @@
 /* ─── Final call to action ─── */
 .nw-cta {
   background: var(--nw-surface);
-  border-top: 1px solid var(--nw-line);
-  border-bottom: 1px solid var(--nw-line);
   padding: var(--nw-sec-y) 0;
 }
 .nw-cta-in {
@@ -973,6 +944,30 @@
   .nw-actions .nw-btn {
     width: 100%;
   }
+}
+.nw-social {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.nw-social a {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--nw-line-2);
+  color: var(--nw-text-2);
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
+}
+.nw-social a:hover {
+  background: var(--nw-accent);
+  border-color: var(--nw-accent);
+  color: #fff;
 }
 @media (max-width: 359px) {
   .nw-cta-head {

@@ -5,7 +5,7 @@
 -- Safe to run more than once. Needs migration 006 first.
 --
 -- The join form asks which industry the brand is in: Fashion, Food & Beverage,
--- Beauty & Personal Care or Something else. It's optional, so it can be empty.
+-- Beauty & Personal Care, Agency or Something else. It's optional, so it can be empty.
 -- Until this is run, people still join; their industry just isn't saved.
 -- ══════════════════════════════════════════════════════════════
 

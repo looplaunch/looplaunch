@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Mail } from "lucide-react";
 import { useWaitlistGame } from "@/components/waitlist/WaitlistGame";
-import { INDUSTRY_OPTIONS } from "@/lib/waitlist/details";
 import { siteConfig } from "@/lib/seo";
 import { smoothScrollTo } from "@/lib/smooth-scroll";
 import "./waitlist-sections.css";
@@ -18,7 +18,6 @@ const DEMO_VIDEO_URL = "/demo/loop-launch-demo.mp4";
 const DEMO_POSTER = "/demo/loop-launch-demo-poster.jpg";
 
 const INSTAGRAM_URL = "https://www.instagram.com/looplaunch.in/";
-const INDUSTRIES = INDUSTRY_OPTIONS.filter((option) => option !== "Something else");
 
 /** Delay for the landing page's scroll reveal (landing.css), to stagger a group. */
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
@@ -63,7 +62,7 @@ function JoinButton({ children = "Join the waitlist", industry }: { children?: R
   );
 }
 
-/** Everything below the waitlist hero: why, how, the demo, what you get, who it's for, proof, FAQ. */
+/** Everything below the waitlist hero: why, how, the demo, what you get, proof, FAQ. */
 export function WaitlistSections() {
   return (
     <div className="nw">
@@ -72,7 +71,6 @@ export function WaitlistSections() {
       <DemoSection />
       <GetSection />
       <HumanSection />
-      <WhoSection />
       <TipsSection />
       <CredSection />
       <FaqSection />
@@ -123,7 +121,7 @@ function ProblemSection() {
           <div data-reveal>
             <p className="nw-eyebrow">What founders told us</p>
             <h2 className="nw-h2 nw-pb-h" id="problem-h">
-              They had a team. They didn’t have a brain.
+              They had a team. but no one to think marketing.
             </h2>
           </div>
           <div>
@@ -384,7 +382,12 @@ function GetSection() {
         </div>
         <div className="nw-grid4">
           {GETS.map(([title, text], i) => (
-            <article key={title} className={`nw-card${i === 3 ? " nw-card-angle" : ""}`} data-reveal style={delay(i * 80)}>
+            <article
+              key={title}
+              className={`nw-card${title === "Stop" || title === "Your angle" ? " nw-card-hi" : ""}`}
+              data-reveal
+              style={delay(i * 80)}
+            >
               <h3 className="nw-h3">{name ? `${title}, ${name}` : title}</h3>
               <p>{text}</p>
             </article>
@@ -444,7 +447,7 @@ function HumanSection() {
     <section className="nw-sec" id="human" aria-labelledby="human-h">
       <div className="nw-wrap">
         <h2 className="nw-h2 nw-narrow" id="human-h" data-reveal>
-          We’re not another AI tool. We’re your strategy engine.
+          We’re not another AI tool. We’re your strategy and content engine.
         </h2>
         <div className="nw-human-grid">
           <div className="nw-nums">
@@ -494,45 +497,6 @@ function HumanSection() {
         </div>
       </div>
     </section>
-  );
-}
-
-/* ─── Who it's for: each industry opens the join with it picked ─── */
-
-function WhoSection() {
-  return (
-    <section className="nw-sec" id="who" aria-labelledby="who-h">
-      <div className="nw-wrap nw-center">
-        <div className="nw-head" data-reveal>
-          <h2 className="nw-h2" id="who-h">
-            For founders who need a CMO but can’t hire one yet.
-          </h2>
-          <p className="nw-sub">If your brand is small and your ambition isn’t, this is for you.</p>
-        </div>
-        <ul className="nw-chips" data-reveal>
-          {INDUSTRIES.map((industry) => (
-            <li key={industry}>
-              <JoinIndustryChip industry={industry} />
-            </li>
-          ))}
-        </ul>
-        <p className="nw-sub nw-niche" data-reveal>
-          We niched down to three industries, so every strategy goes deep into how your industry actually sells.
-        </p>
-        <p className="nw-small nw-muted nw-else" data-reveal>
-          Building something else? Join anyway and tell us what you’re building.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function JoinIndustryChip({ industry }: { industry: string }) {
-  const { openGame } = useWaitlistGame();
-  return (
-    <button type="button" className="nw-chip" onClick={() => openGame(industry)} aria-label={`Join the waitlist for ${industry}`}>
-      {industry}
-    </button>
   );
 }
 
@@ -642,7 +606,7 @@ function CredSection() {
           </div>
           <div className="nw-stat" data-reveal style={delay(160)}>
             <dt className="nw-statnum">
-              <Counter to={5} /> million
+              <Counter to={5} />M
             </dt>
             <dd className="nw-small nw-muted">organic views in the first 60 days</dd>
           </div>
@@ -651,9 +615,7 @@ function CredSection() {
             <dd className="nw-small nw-muted">across India, UAE, Singapore, Vietnam, Australia, the US, the UK and Europe</dd>
           </div>
         </dl>
-        <p className="nw-small nw-muted" data-reveal>
-          Led by Anayana Singhvi, founder of Loop Launch and Youth Icon Award 2026 winner.
-        </p>
+      
       </div>
     </section>
   );
@@ -757,8 +719,37 @@ function CtaSection() {
             </p>
           </>
         )}
+        <div className="nw-social" data-reveal>
+          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" aria-label="Loop Launch on Instagram">
+            <InstagramIcon />
+          </a>
+          <a href={`mailto:${siteConfig.links.contact}`} aria-label={`Email ${siteConfig.links.contact}`}>
+            <Mail size={20} aria-hidden="true" />
+          </a>
+        </div>
       </div>
     </section>
+  );
+}
+
+/** Lucide dropped its brand icons, so Instagram is drawn here in the same 24px stroke style. */
+function InstagramIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2" y="2" width="20" height="20" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M17.5 6.5h.01" />
+    </svg>
   );
 }
 
@@ -789,7 +780,7 @@ export function WaitlistFooter() {
           </nav>
         </div>
         <div className="nw-foot-row nw-foot-row2">
-          <p>© {new Date().getFullYear()} Loop Launch. Built by humans, for founders.</p>
+          <p>© {new Date().getFullYear()} Loop Launch.</p>
           <p>
             <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
               Instagram @looplaunch.in

@@ -7,9 +7,11 @@ import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { createSupabaseBrowserClient } from "@/lib/auth/supabase-browser";
 import { smoothScrollTo } from "@/lib/smooth-scroll";
 import { formatTime } from "@/lib/waitlist/snake";
+import { INDUSTRY_OPTIONS } from "@/lib/waitlist/details";
 import { useWaitlistGame } from "./WaitlistGame";
 
 const ASCII_COLORS = ["#ba1ed8", "#9333ea", "#8b5cf6", "#8e38f8"];
+const HERO_INDUSTRIES = INDUSTRY_OPTIONS.filter((option) => option !== "Something else");
 
 /** Hero of the public landing page while Loop Launch is invite-only: join the waitlist. */
 export function WaitlistHero() {
@@ -56,20 +58,37 @@ export function WaitlistHero() {
         transition={{ duration: 0.7, delay: 0.4, ease: "easeOut" }}
         className="relative z-10 my-auto flex w-full max-w-xl flex-col items-center py-10 text-center"
       >
-        <span className="mb-6 rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs font-medium text-text-secondary backdrop-blur">
-          Invite-only beta
+        <span className="mb-6 rounded-full border border-white/15 bg-black/40 px-4 py-1.5 text-sm font-medium text-text-secondary backdrop-blur">
+          Loop Launch
         </span>
         <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
           Your Virtual CMO is
           <br />
           almost here.
         </h1>
-        <p className="mt-5 max-w-md text-base text-text-secondary sm:text-lg">
-          Loop Launch studies your market, your competitors and their ads, then hands you a marketing plan you can run
-          this week. Join the waitlist for early access.
+        {/* One clause per line from sm up, so the lines stack evenly; phones balance the wrap instead */}
+        <p className="mt-5 max-w-xl text-base text-balance text-text-secondary sm:text-lg">
+          <span className="sm:block">It scans your business, competitors and market,</span>{" "}
+          <span className="sm:block">then tells you exactly what to do this week.</span>{" "}
+          <span className="sm:block">Join the waitlist for early access.</span>
         </p>
 
-        <div className="mt-9 w-full max-w-lg">
+        <ul className="mt-8 flex flex-wrap justify-center gap-2" aria-label="Who it’s for">
+          {HERO_INDUSTRIES.map((industry) => (
+            <li key={industry}>
+              <button
+                type="button"
+                onClick={() => openGame(industry)}
+                aria-label={`Join the waitlist for ${industry}`}
+                className="flex min-h-10 items-center rounded-full border border-white/15 bg-black/40 px-4 text-sm font-medium text-text-primary backdrop-blur transition-colors hover:border-[#5b21b6] hover:bg-black/70 pointer-coarse:min-h-11"
+              >
+                {industry}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-6 w-full max-w-lg">
           <AnimatePresence mode="wait">
             {me ? (
               <motion.div
