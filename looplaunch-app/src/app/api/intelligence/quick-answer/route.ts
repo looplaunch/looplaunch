@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await answerBuyerQuestion(question, session.companyIntelligence ?? null);
+    const result = await answerBuyerQuestion(question, session.companyIntelligence ?? null, session.marketIntelligence?.research?.market);
 
     // Keep the answer with the analysis, so it shows instantly next time.
     const fresh = (await getSession(session.id)) ?? session;

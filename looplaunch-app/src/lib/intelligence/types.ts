@@ -337,7 +337,7 @@ export interface ResearchRunInfo {
     /** SerpApi location the searches ran from */
     searchLocation: string;
     city?: string;
-    /** True when the country was a guess (website didn't say) */
+    /** True when the website doesn't confirm this country (it didn't say, or it points elsewhere) */
     assumed: boolean;
   };
   queries: Array<{
@@ -353,6 +353,9 @@ export interface ResearchRunInfo {
   /** Names the AI suggested that no search result confirmed; never counted as competitors */
   unverifiedCompetitors?: Array<{ name: string; domain?: string }>;
 }
+
+/** The market an analysis researched; every AI answer about the analysis is written for it. */
+export type ResearchMarket = ResearchRunInfo["market"];
 
 export interface TavilySearchResult {
   title: string;

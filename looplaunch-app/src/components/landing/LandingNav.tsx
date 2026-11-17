@@ -9,6 +9,8 @@ interface LandingNavProps {
   onGetStarted?: () => void;
   /** Text of the purple button, e.g. "Join waitlist" while the site is invite-only. */
   ctaLabel?: string;
+  /** Section links; the original landing page's by default. */
+  links?: { label: string; id: string }[];
   /**
    * The waitlist page sets this to false: no "Log in" link (the team logs in from the
    * footer) and a plain logo, since the logo menu offers to start an analysis.
@@ -22,7 +24,7 @@ const LINKS = [
   { label: "What you get", id: "features" },
 ];
 
-export function LandingNav({ onGetStarted, ctaLabel = "Get started", appLinks = true }: LandingNavProps) {
+export function LandingNav({ onGetStarted, ctaLabel = "Get started", links = LINKS, appLinks = true }: LandingNavProps) {
   const jump = (e: React.MouseEvent, id: string) => {
     const target = document.getElementById(id);
     if (!target) return;
@@ -40,7 +42,7 @@ export function LandingNav({ onGetStarted, ctaLabel = "Get started", appLinks = 
         {appLinks ? <LogoMenu>{logo}</LogoMenu> : <Link href="/">{logo}</Link>}
 
         <nav className="ll-nav__links ll-small" aria-label="Main">
-          {LINKS.map((link) => (
+          {links.map((link) => (
             <a key={link.id} href={`#${link.id}`} onClick={(e) => jump(e, link.id)} className="ll-link">
               {link.label}
             </a>

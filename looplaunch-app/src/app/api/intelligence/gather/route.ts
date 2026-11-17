@@ -112,12 +112,14 @@ async function runPipeline(sessionId: string, input: OnboardingInput) {
     const brief = buildResearchBrief({ company: companyIntel, competitors: research.competitors, market: searchData });
 
     // Gemini answers are labelled as AI in Search Intel; Google's own answer stays in `snippet`.
-    // The diagnosis is written at the same time, from the same research brief.
+    // The diagnosis is written at the same time, from the same research brief. All three are
+    // written for the market the research ran in (Google India for most businesses).
     const [marketAnalysis, answers, diagnosis] = await Promise.all([
-      analyzeMarket(input, brief),
+      analyzeMarket(input, brief, research.research.market),
       answerBuyerQuestions(
         research.questions.map((q) => q.question),
-        companyIntel
+        companyIntel,
+        research.research.market
       ),
       generateDiagnosis(companyIntel, research.competitors, { ...searchData, analysisUnavailable: true }, input),
     ]);

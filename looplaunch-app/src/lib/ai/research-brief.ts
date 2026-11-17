@@ -31,7 +31,7 @@ export function buildResearchBrief(input: {
     lines.push(
       `Research status: ${research.status}. Collected ${day(research.dataCollectedAt || research.completedAt)}` +
         `${research.queries.some((q) => q.fromCache) ? " (some results reused from earlier searches)" : ""}. ` +
-        `Google market searched: ${research.market.searchLocation}${research.market.assumed ? " (assumed: the website didn't say where it sells)" : ""}.`
+        `Google market searched: ${research.market.searchLocation}${research.market.assumed ? " (the website doesn't confirm it sells there)" : ""}.`
     );
   } else {
     lines.push(`Research collected ${day(market?.collectedAt)} by an older version of the pipeline; ads weren't sorted into competitor and own ads.`);

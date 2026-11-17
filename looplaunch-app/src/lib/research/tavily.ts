@@ -32,6 +32,8 @@ export interface TavilySearchOptions {
   includeDomains?: string[];
   /** Exclude results from these domains */
   excludeDomains?: string[];
+  /** Rank pages from this country higher ("India"); Tavily applies it to general searches only */
+  country?: string;
 }
 
 export interface TavilySearchResponse {
@@ -100,7 +102,14 @@ function getCacheKey(opts: TavilySearchOptions): string {
     m: opts.maxResults || 10,
     inc: opts.includeDomains?.sort() || [],
     exc: opts.excludeDomains?.sort() || [],
+    c: countryParam(opts) || "",
   });
+}
+
+/** Tavily wants a lowercase English country name ("india"), and only boosts general searches. */
+function countryParam(opts: TavilySearchOptions): string | undefined {
+  const country = opts.country?.trim().toLowerCase();
+  return country && (opts.topic || "general") === "general" ? country : undefined;
 }
 
 // ──────────────────────────────────────────────
@@ -180,6 +189,7 @@ export async function searchTavily(opts: TavilySearchOptions): Promise<TavilySea
       };
     }
 
+    const country = countryParam(opts);
     const response = await client.search(opts.query, {
       searchDepth: opts.searchDepth || "advanced",
       topic: opts.topic || "general",
@@ -188,6 +198,7 @@ export async function searchTavily(opts: TavilySearchOptions): Promise<TavilySea
       includeRawContent: false,
       ...(opts.includeDomains?.length ? { includeDomains: opts.includeDomains } : {}),
       ...(opts.excludeDomains?.length ? { excludeDomains: opts.excludeDomains } : {}),
+      ...(country ? { country } : {}),
     });
 
     // ── Normalize results into Loop Launch format ──
@@ -259,12 +270,12 @@ export interface QuestionResearchResult {
 }
 
 /**
- * Conduct real-time web research on a specific user question.
- * Normalizes results and handles errors without throwing.
+ * Conduct real-time web research on a specific user question, favouring pages from the
+ * analysis's market. Normalizes results and handles errors without throwing.
  */
 export async function researchQuestion(
   question: string,
-  _companyContext?: string
+  options: { country?: string } = {}
 ): Promise<QuestionResearchResult> {
   const searchQuery = question.trim();
 
@@ -283,6 +294,7 @@ export async function researchQuestion(
     searchDepth: "advanced",
     maxResults: 6,
     topic: "general",
+    country: options.country,
   });
 
   if (!response.success) {

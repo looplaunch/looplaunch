@@ -1,9 +1,9 @@
 /**
- * The waitlist and its leaderboard, on the Supabase `waitlist` table (migrations 006, 008 and 009).
+ * The waitlist and its leaderboard, on the Supabase `waitlist` table (migrations 006, 008, 009 and 010).
  * In local development without Supabase an in-memory list stands in, so the page still works.
  *
- * A row is on the board once it has a first name and a best time: fastest first, equal times in
- * the order they were set. Each person keeps one row, with their best time.
+ * A row is on the board once it has a first name and a time: fastest first, equal times in the
+ * order they were set. Each person (email) gets one go: only their first time is ever saved.
  */
 
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
@@ -39,6 +39,7 @@ interface NewRow {
   role: string | null;
   brand_link: string | null;
   brand_platform: string | null;
+  industry: string | null;
 }
 
 export interface WaitlistStore {
@@ -49,8 +50,10 @@ export interface WaitlistStore {
   claimName(id: string, firstName: string, at: string): Promise<void>;
   /** Fills in a role and brand link the row doesn't have yet; what's already there is kept. */
   fillDetails(id: string, details: WaitlistDetails): Promise<void>;
-  /** Saves the time only if it beats the row's best; true when it did. */
-  saveIfFaster(id: string, timeMs: number, at: string): Promise<boolean>;
+  /** Fills in an industry the row doesn't have yet. */
+  fillIndustry(id: string, industry: string): Promise<void>;
+  /** Saves the time only if the row has none yet (one go per person); true when it did. */
+  saveFirstTime(id: string, timeMs: number, at: string): Promise<boolean>;
   board(): Promise<Board>;
   /** Where a best time set at `at` stands, 1 for the fastest. */
   rank(timeMs: number, at: string): Promise<number>;
@@ -72,19 +75,30 @@ function toEntry(row: WaitlistRow): BoardEntry {
   return { id: row.id, name: row.first_name ?? "", timeMs: row.best_time_ms ?? 0 };
 }
 
-// Migration 009 adds role, brand_link and brand_platform. Until it's run, rows are saved without
-// them (with a warning) rather than failing, so deploying before running it loses nothing else.
-const DETAIL_COLUMNS = ["role", "brand_link", "brand_platform"] as const;
-const isMissingDetailColumn = (error: PostgrestError | null) =>
-  Boolean(error && NOT_SET_UP.has(error.code) && DETAIL_COLUMNS.some((c) => error.message.includes(c)));
-let warnedNoDetails = false;
-function warnNoDetails() {
-  if (warnedNoDetails) return;
-  warnedNoDetails = true;
-  console.warn("[Waitlist] Saving without role and brand link: run supabase/migrations/009_waitlist_details_and_logins.sql.");
-}
+// Migration 009 adds role, brand_link and brand_platform, and 010 adds industry. Until each is run,
+// rows are saved without those columns (with a warning) rather than failing, so deploying first
+// loses nothing else.
+const OPTIONAL_COLUMNS = [
+  { columns: ["role", "brand_link", "brand_platform"], what: "role and brand link", migration: "009_waitlist_details_and_logins.sql" },
+  { columns: ["industry"], what: "industry", migration: "010_waitlist_industry.sql" },
+] as const;
+type OptionalColumns = (typeof OPTIONAL_COLUMNS)[number];
 
-function supabaseStore(db: SupabaseClient): WaitlistStore {
+/** The group of not-yet-migrated columns a Supabase error is about, if it's about one. */
+function missingColumns(error: PostgrestError | null): OptionalColumns | null {
+  if (!error || !NOT_SET_UP.has(error.code)) return null;
+  return OPTIONAL_COLUMNS.find((group) => group.columns.some((c) => error.message.includes(c))) ?? null;
+}
+const warned = new Set<string>();
+function warnMissing(group: OptionalColumns) {
+  if (warned.has(group.migration)) return;
+  warned.add(group.migration);
+  console.warn(`[Waitlist] Saving without ${group.what}: run supabase/migrations/${group.migration}.`);
+}
+const DETAILS_GROUP = OPTIONAL_COLUMNS[0];
+const INDUSTRY_GROUP = OPTIONAL_COLUMNS[1];
+
+export function supabaseStore(db: SupabaseClient): WaitlistStore {
   const waitlist = () => db.from("waitlist");
   const onBoard = () => waitlist().select("id", { count: "exact", head: true }).not("first_name", "is", null);
 
@@ -93,13 +107,16 @@ function supabaseStore(db: SupabaseClient): WaitlistStore {
       return check(await waitlist().select(ROW).eq("email", email).maybeSingle(), "find") as WaitlistRow | null;
     },
     async insert(row) {
-      let result = await waitlist().insert(row).select(ROW).single();
-      if (isMissingDetailColumn(result.error)) {
-        warnNoDetails();
-        const withoutDetails = Object.fromEntries(
-          Object.entries(row).filter(([column]) => !(DETAIL_COLUMNS as readonly string[]).includes(column))
-        );
-        result = await waitlist().insert(withoutDetails).select(ROW).single();
+      let toSave: Record<string, unknown> = { ...row };
+      let result = await waitlist().insert(toSave).select(ROW).single();
+      // Each retry drops one group of missing columns; there are only so many groups.
+      for (let retries = 0; retries < OPTIONAL_COLUMNS.length; retries++) {
+        const missing = missingColumns(result.error);
+        if (!missing) break;
+        warnMissing(missing);
+        const dropped: readonly string[] = missing.columns;
+        toSave = Object.fromEntries(Object.entries(toSave).filter(([column]) => !dropped.includes(column)));
+        result = await waitlist().insert(toSave).select(ROW).single();
       }
       // 23505 = unique violation: the email is already on the list.
       if (result.error?.code === "23505") return null;
@@ -121,15 +138,20 @@ function supabaseStore(db: SupabaseClient): WaitlistStore {
           .is("brand_link", null),
       ]);
       for (const result of [role, brand]) {
-        if (isMissingDetailColumn(result.error)) return warnNoDetails();
+        if (missingColumns(result.error) === DETAILS_GROUP) return warnMissing(DETAILS_GROUP);
         check(result, "details");
       }
     },
-    async saveIfFaster(id, timeMs, at) {
+    async fillIndustry(id, industry) {
+      const result = await waitlist().update({ industry }).eq("id", id).is("industry", null);
+      if (missingColumns(result.error) === INDUSTRY_GROUP) return warnMissing(INDUSTRY_GROUP);
+      check(result, "industry");
+    },
+    async saveFirstTime(id, timeMs, at) {
       const result = await waitlist()
         .update({ best_time_ms: timeMs, best_time_at: at })
         .eq("id", id)
-        .or(`best_time_ms.is.null,best_time_ms.gt.${timeMs}`)
+        .is("best_time_ms", null)
         .select("id");
       return (check(result, "best time") ?? []).length > 0;
     },
@@ -200,9 +222,13 @@ export function createMemoryStore(rows = new Map<string, MemoryRow>()): Waitlist
       if (!row.role) row.role = details.role;
       if (!row.brand_link) Object.assign(row, { brand_link: details.brandLink, brand_platform: details.brandPlatform });
     },
-    async saveIfFaster(id, timeMs, at) {
+    async fillIndustry(id, industry) {
       const row = byId(id);
-      if (!row || (row.best_time_ms !== null && row.best_time_ms <= timeMs)) return false;
+      if (row && !row.industry) row.industry = industry;
+    },
+    async saveFirstTime(id, timeMs, at) {
+      const row = byId(id);
+      if (!row || row.best_time_ms !== null) return false;
       Object.assign(row, { best_time_ms: timeMs, best_time_at: at });
       return true;
     },
@@ -245,6 +271,8 @@ export interface JoinInput {
   userAgent: string | null;
   /** Role and brand link. Required to join; optional for someone already on the list saving a time. */
   details?: WaitlistDetails | null;
+  /** The industry they picked, if any. */
+  industry?: string | null;
 }
 
 export interface JoinResult {
@@ -259,7 +287,8 @@ export interface JoinResult {
 }
 
 /**
- * Adds someone to the waitlist, or finds them if they're already on it, and keeps their best time.
+ * Adds someone to the waitlist, or finds them if they're already on it, and saves their time if
+ * they have none yet (one go per person).
  * Someone who joined before keeps the first name they joined with, so a stranger who knows an email
  * can't rename that person on the board.
  */
@@ -283,6 +312,7 @@ export async function joinWaitlist(store: WaitlistStore, input: JoinInput): Prom
       role: input.details.role,
       brand_link: input.details.brandLink,
       brand_platform: input.details.brandPlatform,
+      industry: input.industry ?? null,
     });
     if (row) {
       improved = input.timeMs !== null;
@@ -296,11 +326,12 @@ export async function joinWaitlist(store: WaitlistStore, input: JoinInput): Prom
 
   if (alreadyJoined) {
     if (input.details) await store.fillDetails(row.id, input.details);
+    if (input.industry) await store.fillIndustry(row.id, input.industry);
     if (!row.first_name) {
       await store.claimName(row.id, input.firstName, now);
       row = { ...row, first_name: input.firstName };
     }
-    if (input.timeMs !== null && (await store.saveIfFaster(row.id, input.timeMs, now))) {
+    if (input.timeMs !== null && (await store.saveFirstTime(row.id, input.timeMs, now))) {
       improved = true;
       row = { ...row, best_time_ms: input.timeMs, best_time_at: now };
     }

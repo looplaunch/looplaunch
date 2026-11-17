@@ -12,7 +12,8 @@ export interface Me {
   rank: number | null;
 }
 
-const KEY = "ll_waitlist_me_v1";
+// v2 since the waitlist was emptied on 2026-11-17: browsers forget entries that no longer exist.
+const KEY = "ll_waitlist_me_v2";
 const listeners = new Set<() => void>();
 let unsaved: string | null = null;
 

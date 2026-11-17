@@ -57,3 +57,8 @@ See `crawl4ai-service/README.md` for Docker and Render deployment steps.
 - Gemini sometimes returns markdown-fenced JSON — parser strips fences
 - Fallback fetch crawler can't render JavaScript-heavy sites
 - In-memory store survives Next.js hot reloads via globalThis
+- **Market is India (since 2026-11-07).** Every scan researches Google India: SerpApi `gl=in`, `location=India` (or the Indian city of a local business), Ads Transparency region `2356`, Tavily `country: "india"` with "in India" in the article query. The one exception is a local business (shop, salon, clinic) whose website places it in another country; it is searched in its own city. Logic lives in `lib/research/market.ts`.
+  - Why not trust the website's country: the app runs on Render's default (US) region, so global sites serve their US store and prices to our crawler, and the profiler reads "United States". Before this change, any site that didn't state its country also fell back to the US.
+  - Gemini writes for the market stored with each analysis (`research.market`): `marketBrief()` in `lib/ai/prompts.ts` goes into the market analysis, diagnosis, buyer-question answers and chat prompts (₹, Indian channels and rules). Old analyses keep the market they were researched in.
+  - TikTok is banned in India: for Indian analyses the strategy prompt asks for Reels and Shorts scripts, never TikToks.
+- Tavily's `country` takes a lowercase English country name ("india") and only works with `topic: "general"`. Cache keys (SerpApi and Tavily) include the market, so results cached for another country are never reused.

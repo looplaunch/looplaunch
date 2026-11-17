@@ -15,8 +15,10 @@ import type { FinishedRun } from "@/lib/waitlist/snake";
 import type { Board, JoinResponse } from "@/lib/waitlist/types";
 import { track } from "@/lib/analytics";
 import { parseMe, readMe, readMeOnServer, saveMe, subscribeMe, type Me } from "./me";
+import { parsePlayed, readPlayed, readPlayedOnServer, savePlayed, subscribePlayed } from "./played";
 
-export type Stage = "game" | "claim" | "done";
+/** "already": on the list and had their one go, so there's nothing left to play or claim. */
+export type Stage = "game" | "claim" | "done" | "already";
 export type BoardStatus = "loading" | "ready" | "unavailable";
 
 interface Arena {
@@ -33,12 +35,21 @@ interface WaitlistGameValue {
   me: Me | null;
   signedInEmail: string | null;
   arena: Arena;
+  /** The finished run waiting to be claimed: this visit's, or one saved before a reload. */
+  pendingRun: FinishedRun | null;
+  /** False once this browser has had its one go (from the first move), or its entry has a time. */
+  canPlay: boolean;
   /** A first name typed on the page before the game opened; the join form starts with it. */
   draftName: string;
   setDraftName(name: string): void;
-  openGame(): void;
+  /** An industry picked on the page (a tip or "Who it's for"); the join form starts with it picked. */
+  draftIndustry: string;
+  /** Opens the game; given an industry, the join form afterwards starts with it picked. */
+  openGame(industry?: string): void;
   /** Straight to the form, without playing. */
   openJoin(): void;
+  /** Called on a run's first move: that's this browser's one go. */
+  markPlayed(): void;
   close(): void;
   saveRun(run: FinishedRun): void;
   showClaim(): void;
@@ -70,9 +81,14 @@ export function WaitlistGameProvider({
   const [boardStatus, setBoardStatus] = useState<BoardStatus>("loading");
   const [arena, setArena] = useState<Arena>({ open: false, stage: "game", run: null, result: null });
   const [draftName, setDraftName] = useState("");
+  const [draftIndustry, setDraftIndustry] = useState("");
   const fetchedAt = useRef(0);
   const meRaw = useSyncExternalStore(subscribeMe, readMe, readMeOnServer);
   const me = useMemo(() => parseMe(meRaw), [meRaw]);
+  const playedRaw = useSyncExternalStore(subscribePlayed, readPlayed, readPlayedOnServer);
+  const played = useMemo(() => parsePlayed(playedRaw), [playedRaw]);
+  const canPlay = !played && me?.bestMs == null;
+  const pendingRun = arena.run ?? played?.run ?? null;
 
   const loadBoard = useCallback(() => {
     fetchedAt.current = Date.now();
@@ -87,27 +103,46 @@ export function WaitlistGameProvider({
 
   useEffect(loadBoard, [loadBoard]);
 
-  const openGame = useCallback(() => {
-    if (Date.now() - fetchedAt.current > BOARD_FRESH_MS) loadBoard();
-    setArena((a) => ({ ...a, open: true, stage: a.run ? "claim" : "game", result: null }));
-  }, [loadBoard]);
+  const openGame = useCallback(
+    (industry?: string) => {
+      // Buttons can hand their click event in here; only a real industry name counts.
+      if (typeof industry === "string" && industry) setDraftIndustry(industry);
+      if (Date.now() - fetchedAt.current > BOARD_FRESH_MS) loadBoard();
+      // One go each: after it, a run left to claim opens the form, someone on the list sees where
+      // they stand, and anyone else can join without playing.
+      const stage: Stage = pendingRun ? "claim" : canPlay ? "game" : me ? "already" : "claim";
+      setArena((a) => ({ ...a, open: true, stage, result: null }));
+    },
+    [loadBoard, pendingRun, canPlay, me]
+  );
 
   const openJoin = useCallback(() => {
     track("waitlist_skip_game");
     setArena({ open: true, stage: "claim", run: null, result: null });
   }, []);
 
+  const markPlayed = useCallback(() => {
+    if (!parsePlayed(readPlayed())) savePlayed({ at: Date.now(), run: null });
+  }, []);
+
   const close = useCallback(() => {
     setArena((a) => ({ ...a, open: false, stage: a.stage === "done" ? "game" : a.stage, result: null }));
   }, []);
 
-  const saveRun = useCallback((run: FinishedRun) => setArena((a) => ({ ...a, run })), []);
+  const saveRun = useCallback((run: FinishedRun) => {
+    savePlayed({ at: parsePlayed(readPlayed())?.at ?? Date.now(), run });
+    setArena((a) => ({ ...a, run }));
+  }, []);
   const showClaim = useCallback(() => setArena((a) => (a.open && a.run ? { ...a, stage: "claim" } : a)), []);
   const skip = useCallback(() => {
     track("waitlist_skip_game");
     setArena((a) => ({ ...a, stage: "claim", run: null }));
   }, []);
-  const playAgain = useCallback(() => setArena((a) => ({ ...a, stage: "game", run: null, result: null })), []);
+  // Only for someone who hasn't had their go yet (they joined without playing).
+  const playAgain = useCallback(() => {
+    if (!canPlay) return;
+    setArena((a) => ({ ...a, stage: "game", run: null, result: null }));
+  }, [canPlay]);
 
   const joined = useCallback((result: JoinResponse, email: string) => {
     track("waitlist_join", { method: result.timeMs === null ? "skip" : "game" });
@@ -118,6 +153,9 @@ export function WaitlistGameProvider({
       setBoard(result.board);
       setBoardStatus("ready");
     }
+    // The run is claimed now; the go stays used.
+    const playedNow = parsePlayed(readPlayed());
+    if (playedNow?.run) savePlayed({ at: playedNow.at, run: null });
     setArena((a) => ({ ...a, stage: "done", run: null, result }));
   }, []);
 
@@ -128,10 +166,14 @@ export function WaitlistGameProvider({
       me,
       signedInEmail,
       arena,
+      pendingRun,
+      canPlay,
       draftName,
       setDraftName,
+      draftIndustry,
       openGame,
       openJoin,
+      markPlayed,
       close,
       saveRun,
       showClaim,
@@ -139,7 +181,7 @@ export function WaitlistGameProvider({
       playAgain,
       joined,
     }),
-    [board, boardStatus, me, signedInEmail, arena, draftName, openGame, openJoin, close, saveRun, showClaim, skip, playAgain, joined]
+    [board, boardStatus, me, signedInEmail, arena, pendingRun, canPlay, draftName, draftIndustry, openGame, openJoin, markPlayed, close, saveRun, showClaim, skip, playAgain, joined]
   );
 
   return <WaitlistGameContext.Provider value={value}>{children}</WaitlistGameContext.Provider>;

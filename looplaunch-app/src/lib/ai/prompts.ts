@@ -14,9 +14,40 @@ import type {
   CompanyIntelligence,
   CompetitorIntelligence,
   MarketIntelligence,
+  ResearchMarket,
   StrategicDiagnosis,
 } from "../intelligence/types";
 import { buildResearchBrief, RESEARCH_RULES } from "./research-brief";
+
+// ──────────────────────────────────────────────
+// The market an answer is written for
+// ──────────────────────────────────────────────
+
+type MarketRef = Pick<ResearchMarket, "country" | "city"> | undefined;
+
+const isIndia = (market: MarketRef) => /^india$/i.test(market?.country?.trim() || "");
+
+/**
+ * Tells the model which market to write for, from the market the analysis researched.
+ * Without it the model writes for the US: dollar prices, US marketplaces and laws, TikTok.
+ * Analyses older than the research pipeline have no market and get "".
+ */
+export function marketBrief(market: MarketRef): string {
+  if (!market?.country) return "";
+  const where = market.city ? `${market.city}, ${market.country}` : market.country;
+  if (isIndia(market)) {
+    return `═══ MARKET: INDIA ═══
+This business was researched on Google India. Write everything for buyers in ${where}:
+- Money in rupees (₹). Quote prices only as the research shows them; never convert or invent them.
+- Use the channels, marketplaces and payments buyers in India actually use (for example WhatsApp, Instagram, YouTube, Amazon.in, Flipkart, UPI, cash on delivery), and Indian festivals and sale seasons when timing matters.
+- When rules matter, name Indian ones (for example ASCI advertising guidelines, FSSAI for food, the DPDP Act for personal data), not US ones.
+- TikTok is banned in India: for short videos, recommend Instagram Reels and YouTube Shorts.
+`;
+  }
+  return `═══ MARKET: ${market.country.toUpperCase()} ═══
+This business was researched on Google ${market.country}. Write everything for buyers in ${where}: their currency, the channels and marketplaces they use, and local rules when rules matter.
+`;
+}
 
 // ──────────────────────────────────────────────
 // Company Intelligence Prompt
@@ -123,7 +154,8 @@ RULES:
 
 export function buildMarketAnalysisPrompt(
   onboarding: OnboardingInput,
-  searchResults: string
+  searchResults: string,
+  market?: MarketRef
 ): string {
   return `You are a market research analyst for Loop Launch.
 
@@ -138,7 +170,7 @@ Stage: ${onboarding.stage || "Not specified"}
 Biggest Headache: ${onboarding.biggestHeadache || "Not specified"}
 30-Day Goal: ${onboarding.thirtyDayGoal || "Not specified"}
 
-═══ RESEARCH DATA ═══
+${marketBrief(market)}═══ RESEARCH DATA ═══
 ${searchResults || "No market research data was gathered."}
 
 ═══ INSTRUCTIONS ═══
@@ -173,7 +205,8 @@ export function buildDiagnosisPrompt(
   companyIntel: string,
   researchBrief: string,
   marketAnalysis: string,
-  onboarding: OnboardingInput
+  onboarding: OnboardingInput,
+  market?: MarketRef
 ): string {
   return `You are a senior marketing strategist at Loop Launch, an AI-powered strategic marketing intelligence system.
 
@@ -182,6 +215,7 @@ TASK: Synthesize all gathered intelligence into a STRATEGIC DIAGNOSIS.
 ═══ COMPANY PROFILE (extracted from its website) ═══
 ${companyIntel}
 
+${marketBrief(market)}
 ${researchBrief}
 ${marketAnalysis ? `
 ═══ AI MARKET ANALYSIS (an earlier interpretation, not an observation) ═══
@@ -354,13 +388,18 @@ Biggest Headache: ${onboardingInput.biggestHeadache || "Not specified"} — this
     value && !/^(unspecified|not_disclosed)$/i.test(value) ? value : fallback;
   const list = (items: string[] | undefined) => (items && items.length ? items.join("; ") : "Not known");
 
+  const market = marketIntel?.research?.market;
+  // TikTok is banned in India, so Indian strategies script Reels and Shorts instead.
+  const india = isIndia(market);
+  const shortVideos = india ? "Reels and Shorts" : "Reels and TikToks";
+
   return `You are the Chief Strategy Officer and Lead Marketing Advisor at Loop Launch. You are in an ONGOING, collaborative strategic advisory conversation with the company founder/executive.
 
 ${summaryBlock}═══ CONVERSATION HISTORY (Previous turns in this session) ═══
 ${historyText}
 
 ${onboardingBlock}${frameworkSection}${webResearchSection}
-═══ BUSINESS PROFILE (from its website; "Not known" means the website didn't say) ═══
+${marketBrief(market)}═══ BUSINESS PROFILE (from its website; "Not known" means the website didn't say) ═══
 Company: ${companyIntel.name} (${companyIntel.website || "N/A"})
 Industry: ${known(companyIntel.industry)}${companyIntel.subIndustry ? ` (${companyIntel.subIndustry})` : ""}
 Business Model: ${known(companyIntel.businessModel)}
@@ -427,11 +466,11 @@ ${referenceNote}${intentNote}
      - AFTER the 7-day breakdown, provide the full detailed strategy with explanations, hooks, formats, exact steps.
      - The strategy must be tailored to their core offer ("${onboardingInput?.coreOffer || "their product"}"), their audience (${onboardingInput?.audience?.join(", ") || "their buyers"}), their channels (${onboardingInput?.salesChannels?.join(", ") || "their platforms"}), and their 30-day goal ("${onboardingInput?.thirtyDayGoal || "growth"}").
      - Keep it highly practical (channels, hooks, formats, exact steps).
-     - **CRITICAL REQUIREMENT FOR REELS / TIKTOKS**: If your strategy recommends or mentions creating TikToks, Instagram Reels, YouTube Shorts, or short-form videos:
+     - **CRITICAL REQUIREMENT FOR SHORT VIDEOS**: If your strategy recommends or mentions creating ${india ? "" : "TikToks, "}Instagram Reels, YouTube Shorts, or short-form videos:
        - You MUST explicitly conclude your response by asking:
-         "💡 **Next Step:** Would you like me to generate the complete, ready-to-record scripts (3-second visual hooks, on-screen text, voiceover script, and CTA) for these Reels and TikToks?"
-       - Ensure followUpQuestions includes "Generate scripts for the recommended TikToks & Reels".
-   - If the client asks to generate scripts for the TikToks / Reels (or replies 'yes' / requests video scripts):
+         "💡 **Next Step:** Would you like me to generate the complete, ready-to-record scripts (3-second visual hooks, on-screen text, voiceover script, and CTA) for these ${shortVideos}?"
+       - Ensure followUpQuestions includes "Generate scripts for the recommended ${shortVideos}".
+   - If the client asks to generate scripts for the ${shortVideos} (or replies 'yes' / requests video scripts):
      - Generate complete, high-converting short-form video scripts formatted with:
        • **Concept & Angle**: Why this hooks their ICP.
        • **Visual Hook (0-3s)**: Exactly what happens on screen to stop the scroll.

@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { brandPlatformOf, cleanBrandLink, cleanRole, parseDetails } from "../details";
+import { INDUSTRY_OPTIONS, brandPlatformOf, cleanBrandLink, cleanIndustry, cleanRole, parseDetails } from "../details";
 import { MissingDetailsError, createMemoryStore, joinWaitlist } from "../board";
 
 describe("waitlist details", () => {
+  test("an industry is one of the options exactly, or nothing", () => {
+    for (const option of INDUSTRY_OPTIONS) assert.equal(cleanIndustry(option), option);
+    assert.equal(cleanIndustry("fashion"), null);
+    assert.equal(cleanIndustry(""), null);
+    assert.equal(cleanIndustry(undefined), null);
+    assert.equal(cleanIndustry(["Fashion"]), null);
+  });
+
   test("roles keep the person's words, but not a bare Other", () => {
     assert.equal(cleanRole("  Co-founder "), "Co-founder");
     assert.equal(cleanRole("Head   of\ngrowth"), "Head of growth");

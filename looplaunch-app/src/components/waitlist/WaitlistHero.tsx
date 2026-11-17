@@ -14,8 +14,8 @@ const ASCII_COLORS = ["#ba1ed8", "#9333ea", "#8b5cf6", "#8e38f8"];
 /** Hero of the public landing page while Loop Launch is invite-only: join the waitlist. */
 export function WaitlistHero() {
   const router = useRouter();
-  const { me, arena, signedInEmail, openGame } = useWaitlistGame();
-  const unclaimed = !arena.open ? arena.run : null;
+  const { me, arena, pendingRun, signedInEmail, openGame } = useWaitlistGame();
+  const unclaimed = !arena.open ? pendingRun : null;
 
   const signOut = async () => {
     await createSupabaseBrowserClient().auth.signOut();
@@ -23,7 +23,7 @@ export function WaitlistHero() {
   };
 
   const scrollToExplore = () => {
-    const section = document.getElementById("how-it-works");
+    const section = document.getElementById("problem");
     if (section) smoothScrollTo(section);
   };
 
@@ -60,7 +60,7 @@ export function WaitlistHero() {
           Invite-only beta
         </span>
         <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
-          Your AI CMO is
+          Your Virtual CMO is
           <br />
           almost here.
         </h1>
@@ -100,7 +100,7 @@ export function WaitlistHero() {
                 </p>
                 <button
                   type="button"
-                  onClick={openGame}
+                  onClick={() => openGame()}
                   className="shrink-0 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"
                 >
                   Claim it
@@ -114,7 +114,7 @@ export function WaitlistHero() {
               >
                 <button
                   type="button"
-                  onClick={openGame}
+                  onClick={() => openGame()}
                   className="w-full rounded-xl bg-white px-5 py-3.5 text-sm font-semibold text-black transition hover:bg-white/90 active:scale-[0.99]"
                 >
                   Join the waitlist

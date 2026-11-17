@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { cleanFirstName, isBlockedName } from "../names";
-import { createMemoryStore, joinWaitlist, type WaitlistStore } from "../board";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createMemoryStore, joinWaitlist, supabaseStore, type WaitlistStore } from "../board";
 
 const DETAILS = { role: "Founder", brandLink: "brand.com", brandPlatform: "website" as const };
 
@@ -34,7 +35,7 @@ describe("waitlist leaderboard", () => {
     assert.equal(skipped.board.total, 3, "people who skipped aren't on the board");
   });
 
-  test("each person keeps one row with their best time", async () => {
+  test("one go per person: only the first time is ever saved", async () => {
     const store = createMemoryStore();
     await join(store, "a@x.com", "Asha", 2560);
     await join(store, "b@x.com", "Ben", 2240);
@@ -46,13 +47,23 @@ describe("waitlist leaderboard", () => {
     assert.equal(slower.rank, 2);
 
     const faster = await join(store, "a@x.com", "Asha", 1920);
-    assert.equal(faster.improved, true);
-    assert.equal(faster.bestMs, 1920);
-    assert.equal(faster.rank, 1);
+    assert.equal(faster.improved, false, "a second run never replaces the first, even when faster");
+    assert.equal(faster.bestMs, 2560);
+    assert.equal(faster.rank, 2);
     assert.equal(faster.board.total, 2);
 
     const later = await join(store, "a@x.com", "Asha", null);
-    assert.equal(later.bestMs, 1920, "joining again without playing keeps the best");
+    assert.equal(later.bestMs, 2560, "joining again without playing keeps the time");
+  });
+
+  test("someone who joined without playing can still post their one time", async () => {
+    const store = createMemoryStore();
+    await join(store, "skip@x.com", "Sara", null);
+    const first = await join(store, "skip@x.com", "Sara", 2400);
+    assert.equal(first.improved, true);
+    assert.equal(first.bestMs, 2400);
+    const second = await join(store, "skip@x.com", "Sara", 2000);
+    assert.equal(second.bestMs, 2400);
   });
 
   test("the first name someone joined with stays theirs", async () => {
@@ -83,6 +94,22 @@ describe("waitlist leaderboard", () => {
     assert.equal(result.improved, true);
     assert.equal(result.rank, 1);
   });
+
+  test("the industry picked is saved, filled in later only when there was none", async () => {
+    const rows = new Map();
+    const store = createMemoryStore(rows);
+    const base = { firstName: "Isha", timeMs: null, source: null, userAgent: null, details: DETAILS };
+    await joinWaitlist(store, { ...base, email: "isha@x.com", industry: "Fashion" });
+    assert.equal(rows.get("isha@x.com").industry, "Fashion");
+
+    await joinWaitlist(store, { ...base, email: "isha@x.com", industry: "Food & Beverage" });
+    assert.equal(rows.get("isha@x.com").industry, "Fashion", "someone who knows an email can't change it");
+
+    await joinWaitlist(store, { ...base, email: "none@x.com" });
+    assert.equal(rows.get("none@x.com").industry, null);
+    await joinWaitlist(store, { ...base, email: "none@x.com", industry: "Beauty & Personal Care" });
+    assert.equal(rows.get("none@x.com").industry, "Beauty & Personal Care");
+  });
 });
 
 describe("first names on the board", () => {
@@ -105,5 +132,47 @@ describe("first names on the board", () => {
     for (const ok of ["Shital", "Nazia", "Nazir", "Anal", "Dick", "Dickson", "Ashita", "Pornchai", "Cassandra", "Hancock"]) {
       assert.ok(!isBlockedName(ok), ok);
     }
+  });
+});
+
+describe("saving before a migration has been run", () => {
+  /** A stand-in for the Supabase table that lacks some columns, recording what each insert sent. */
+  function tableWithout(missing: string[]) {
+    const inserts: Record<string, unknown>[] = [];
+    const db = {
+      from: () => ({
+        insert: (row: Record<string, unknown>) => ({
+          select: () => ({
+            single: async () => {
+              inserts.push(row);
+              const absent = Object.keys(row).find((column) => missing.includes(column));
+              return absent
+                ? { data: null, error: { code: "PGRST204", message: `Could not find the '${absent}' column of 'waitlist' in the schema cache` } }
+                : { data: { id: "1", first_name: row.first_name, best_time_ms: null, best_time_at: null }, error: null };
+            },
+          }),
+        }),
+      }),
+    };
+    return { store: supabaseStore(db as unknown as SupabaseClient), inserts };
+  }
+  const row = {
+    email: "a@x.com", first_name: "Asha", best_time_ms: null, best_time_at: null, consented_at: "now",
+    source: null, user_agent: null, role: "Founder", brand_link: "brand.com", brand_platform: "website", industry: "Fashion",
+  };
+
+  test("without 010, the row is saved without its industry and keeps everything else", async () => {
+    const { store, inserts } = tableWithout(["industry"]);
+    assert.ok(await store.insert(row));
+    assert.equal(inserts.length, 2);
+    assert.equal("industry" in inserts[1], false);
+    assert.equal(inserts[1].role, "Founder");
+  });
+
+  test("without 009 or 010, the row is saved with name and email only", async () => {
+    const { store, inserts } = tableWithout(["industry", "role", "brand_link", "brand_platform"]);
+    assert.ok(await store.insert(row));
+    assert.equal(inserts.length, 3);
+    assert.deepEqual(Object.keys(inserts[2]).sort(), ["best_time_at", "best_time_ms", "consented_at", "email", "first_name", "source", "user_agent"]);
   });
 });

@@ -155,10 +155,10 @@ async function answerAndSave(
   let researchStatus: "success" | "no_results" | "failed" | "unconfigured" = "unconfigured";
 
   if (analysis.needsWebResearch && analysis.searchQuery) {
-    const research = await researchQuestion(
-      analysis.searchQuery,
-      session.companyIntelligence?.industry
-    );
+    // Favour pages from the market this analysis researched (India for most businesses).
+    const research = await researchQuestion(analysis.searchQuery, {
+      country: session.marketIntelligence.research?.market.country,
+    });
     researchResults = research.results;
     researchStatus = research.status;
   }

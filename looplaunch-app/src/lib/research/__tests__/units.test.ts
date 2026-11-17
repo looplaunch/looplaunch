@@ -238,17 +238,40 @@ describe("search plan and market", () => {
     assert.deepEqual(ownProductOnly, ["buy smartphones"]);
   });
 
-  test("market: stated country, domain hint, default, local city", async () => {
-    assert.equal((await resolveMarket(profile({ country: "United Kingdom" }))).gl, "uk");
-    const hinted = await resolveMarket(profile({ country: "", website: "https://shop.example.in" }));
-    assert.equal(hinted.country, "India");
-    assert.equal(hinted.region, "2356");
-    assert.equal(hinted.assumed, true);
-    const fallback = await resolveMarket(profile({ country: "", website: "https://shop.example.com" }));
-    assert.equal(fallback.country, "United States");
-    assert.ok(fallback.notes.length === 1);
-    const local = await resolveMarket(profile({ marketScope: "local", city: "Austin, Texas" }), async () => "Austin,Texas,United States");
-    assert.equal(local.location, "Austin,Texas,United States");
-    assert.equal(local.city, "Austin");
+  test("market: Google India for every business, with a note when the website doesn't confirm it", async () => {
+    const indian = await resolveMarket(profile({ country: "India" }));
+    assert.deepEqual([indian.country, indian.gl, indian.region, indian.location, indian.assumed], ["India", "in", "2356", "India", false]);
+    assert.deepEqual(indian.notes, []);
+
+    const unsaid = await resolveMarket(profile({ country: "", geography: "unspecified", website: "https://shop.example.com" }));
+    assert.deepEqual([unsaid.country, unsaid.gl, unsaid.assumed], ["India", "in", true]);
+    assert.deepEqual(unsaid.notes, ["The website doesn't say where it sells, so searches ran on Google India."]);
+
+    // Global sites read from a US server show their US store; that doesn't move the research.
+    for (const scope of ["national", "international", "unknown"] as const) {
+      const elsewhere = await resolveMarket(profile({ country: "United States", marketScope: scope }));
+      assert.deepEqual([elsewhere.country, elsewhere.gl, elsewhere.assumed], ["India", "in", true], scope);
+      assert.ok(elsewhere.notes[0].includes("points to United States"), scope);
+    }
+  });
+
+  test("market: a local business is searched in its own city, in India or abroad", async () => {
+    const asked: Array<[string, string]> = [];
+    const resolver = async (city: string, iso2: string) => {
+      asked.push([city, iso2]);
+      return iso2 === "IN" ? "Pune,Maharashtra,India" : "Austin,Texas,United States";
+    };
+    const pune = await resolveMarket(profile({ marketScope: "local", country: "India", city: "Pune, Maharashtra" }), resolver);
+    assert.deepEqual([pune.country, pune.location, pune.city, pune.assumed], ["India", "Pune,Maharashtra,India", "Pune", false]);
+
+    // Results from India would be no use to a shop abroad, so it keeps its own country.
+    const austin = await resolveMarket(profile({ marketScope: "local", country: "United States", city: "Austin, Texas" }), resolver);
+    assert.deepEqual([austin.country, austin.gl, austin.location, austin.city, austin.assumed], ["United States", "us", "Austin,Texas,United States", "Austin", false]);
+    assert.deepEqual(asked, [["Pune, Maharashtra", "IN"], ["Austin, Texas", "US"]]);
+
+    // A local business that doesn't say its country is taken to be in India.
+    const unsaid = await resolveMarket(profile({ marketScope: "local", country: "", city: "Indore" }), async () => null);
+    assert.equal(unsaid.country, "India");
+    assert.ok(unsaid.notes.some((n) => n.includes("couldn't place \"Indore\"")));
   });
 });

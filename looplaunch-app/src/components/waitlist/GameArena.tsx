@@ -8,7 +8,7 @@ import type { FinishedRun, Status } from "@/lib/waitlist/snake";
 import { createLiveClock } from "./live-clock";
 import { Leaderboard, type YouRow } from "./Leaderboard";
 import { SnakeBoard } from "./SnakeBoard";
-import { ClaimCard, DoneCard } from "./GameCards";
+import { AlreadyCard, ClaimCard, DoneCard } from "./GameCards";
 import { useWaitlistGame } from "./WaitlistGame";
 
 // Long enough to see the finish (the ring, the confetti, the time locking in) before the form.
@@ -34,7 +34,15 @@ export function GameArena() {
   const [runStatus, setRunStatus] = useState<Status>("ready");
   const touch = useSyncExternalStore(subscribeTouch, () => matchMedia(touchQuery).matches, () => false);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const { close, saveRun, showClaim } = game;
+  const { close, saveRun, showClaim, markPlayed } = game;
+  // The first move uses up this browser's one go.
+  const onStatus = useCallback(
+    (status: Status) => {
+      setRunStatus(status);
+      if (status === "play") markPlayed();
+    },
+    [markPlayed]
+  );
 
   // While open: no page scroll behind, focus inside, and back on the button that opened it after.
   useEffect(() => {
@@ -91,12 +99,11 @@ export function GameArena() {
   const playing = arena.stage === "game";
   const mine = me ? { id: me.entryId, bestMs: me.bestMs } : null;
   let you: YouRow | null = null;
-  // "This run" when they're racing their own saved best on the board, "You" otherwise.
-  const label = me?.bestMs != null ? "This run" : "You";
+  const label = "You";
   if (arena.stage === "game" && (runStatus === "play" || runStatus === "won")) {
     you = { label, ms: runStatus === "won" && arena.run ? arena.run.timeMs : null };
-  } else if (arena.stage === "claim" && arena.run) {
-    you = { label, ms: arena.run.timeMs };
+  } else if (arena.stage === "claim" && game.pendingRun) {
+    you = { label, ms: game.pendingRun.timeMs };
   }
 
   return (
@@ -151,7 +158,7 @@ export function GameArena() {
                       clock={clock}
                       target={board?.top[0]?.timeMs ?? null}
                       touch={touch}
-                      onStatus={setRunStatus}
+                      onStatus={onStatus}
                       onFinish={onFinish}
                       onSkip={game.skip}
                       onEscape={close}
@@ -161,20 +168,26 @@ export function GameArena() {
                     {arena.stage === "claim" && (
                       <motion.div key="claim" exit={{ opacity: 0, transition: { duration: 0.15 } }} className="flex flex-1 justify-center">
                         <ClaimCard
-                          run={arena.run}
+                          run={game.pendingRun}
+                          canPlay={game.canPlay}
                           board={board}
                           me={me}
                           signedInEmail={signedInEmail}
                           draftName={game.draftName}
+                          draftIndustry={game.draftIndustry}
                           onJoined={game.joined}
                           onPlayAgain={game.playAgain}
-                          onClose={close}
                         />
                       </motion.div>
                     )}
                     {arena.stage === "done" && arena.result && (
                       <motion.div key="done" exit={{ opacity: 0, transition: { duration: 0.15 } }} className="flex flex-1 justify-center">
-                        <DoneCard result={arena.result} me={me} onPlayAgain={game.playAgain} onClose={close} />
+                        <DoneCard result={arena.result} me={me} canPlay={game.canPlay} onPlayAgain={game.playAgain} onClose={close} />
+                      </motion.div>
+                    )}
+                    {arena.stage === "already" && me && (
+                      <motion.div key="already" exit={{ opacity: 0, transition: { duration: 0.15 } }} className="flex flex-1 justify-center">
+                        <AlreadyCard me={me} board={board} onClose={close} />
                       </motion.div>
                     )}
                   </AnimatePresence>

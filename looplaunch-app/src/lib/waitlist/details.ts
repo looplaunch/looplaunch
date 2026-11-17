@@ -7,6 +7,15 @@
 /** The roles offered as choices. "Other" lets them type their own. */
 export const ROLE_OPTIONS = ["Founder", "Co-founder", "CEO", "CTO", "CMO", "Marketing lead", "Agency / Freelancer", "Other"] as const;
 
+/** The industries Loop Launch is built for first. Optional when joining; "Something else" covers the rest. */
+export const INDUSTRY_OPTIONS = ["Fashion", "Food & Beverage", "Beauty & Personal Care", "Something else"] as const;
+export type Industry = (typeof INDUSTRY_OPTIONS)[number];
+
+/** One of the industry options exactly, or null for anything else (nothing picked counts as nothing). */
+export function cleanIndustry(raw: unknown): Industry | null {
+  return INDUSTRY_OPTIONS.find((option) => option === raw) ?? null;
+}
+
 export const ROLE_MAX = 60;
 export const BRAND_LINK_MAX = 300;
 

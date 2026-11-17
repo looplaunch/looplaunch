@@ -7,8 +7,9 @@ import { HeroSection } from "./HeroSection";
 import { StepsSection } from "./StepsSection";
 import { AskSection } from "./AskSection";
 import { SwitchesSection } from "./SwitchesSection";
-import { StartClosingLine, WaitlistClosingLine } from "./ClosingLine";
+import { StartClosingLine } from "./ClosingLine";
 import { LandingClose } from "./LandingClose";
+import { StickyJoin, WaitlistFooter, WaitlistSections } from "./WaitlistSections";
 import { WaitlistHero } from "@/components/waitlist/WaitlistHero";
 import { GameArena } from "@/components/waitlist/GameArena";
 import { WaitlistGameProvider, useWaitlistGame } from "@/components/waitlist/WaitlistGame";
@@ -32,12 +33,31 @@ export function LandingPage() {
     <LandingLayout
       hero={<HeroSection />}
       onNavCta={scrollToHero}
-      closing={<StartClosingLine onStart={handleStartOnboarding} />}
+      sections={
+        <>
+          <StepsSection />
+          <AskSection />
+          <SwitchesSection />
+          <StartClosingLine onStart={handleStartOnboarding} />
+        </>
+      }
+      footer={<LandingClose />}
     />
   );
 }
 
-/** The public landing page while Loop Launch is invite-only: same page, waitlist hero. Joining opens Loopy's snake over the page (with a skip). */
+const WAITLIST_NAV = [
+  { label: "How it works", id: "how" },
+  { label: "What you get", id: "get" },
+  { label: "Who it’s for", id: "who" },
+  { label: "FAQ", id: "faq" },
+];
+
+/**
+ * The public landing page while Loop Launch is invite-only: the waitlist hero, then the waitlist
+ * sections (why, how, demo, what you get, who it's for, proof, FAQ). Every join button opens
+ * Loopy's snake over the page (with a skip), which ends in the join form.
+ */
 export function WaitlistLandingPage({ signedInEmail }: { signedInEmail?: string | null }) {
   return (
     <WaitlistGameProvider signedInEmail={signedInEmail}>
@@ -53,9 +73,16 @@ function WaitlistLanding() {
     <LandingLayout
       hero={<WaitlistHero />}
       navCtaLabel="Join waitlist"
-      onNavCta={openGame}
+      navLinks={WAITLIST_NAV}
+      onNavCta={() => openGame()}
       waitlist
-      closing={<WaitlistClosingLine />}
+      sections={<WaitlistSections />}
+      footer={
+        <>
+          <WaitlistFooter />
+          <StickyJoin />
+        </>
+      }
       overlay={<GameArena />}
       inert={arena.open}
     />
@@ -65,9 +92,12 @@ function WaitlistLanding() {
 interface LandingLayoutProps {
   hero: ReactNode;
   onNavCta: () => void;
-  /** The closing sentence before the footer */
-  closing: ReactNode;
+  /** Everything between the hero and the footer */
+  sections: ReactNode;
+  footer: ReactNode;
   navCtaLabel?: string;
+  /** The nav's section links, when the page's sections differ from the default ones. */
+  navLinks?: { label: string; id: string }[];
   /** Invite-only page: login moves from the nav to the footer. */
   waitlist?: boolean;
   /** Drawn over the page (the snake game); `inert` takes the page out of reach while it's open. */
@@ -75,7 +105,7 @@ interface LandingLayoutProps {
   inert?: boolean;
 }
 
-function LandingLayout({ hero, onNavCta, closing, navCtaLabel, waitlist = false, overlay, inert = false }: LandingLayoutProps) {
+function LandingLayout({ hero, onNavCta, sections, footer, navCtaLabel, navLinks, waitlist = false, overlay, inert = false }: LandingLayoutProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   useRevealOnScroll(rootRef);
 
@@ -88,15 +118,12 @@ function LandingLayout({ hero, onNavCta, closing, navCtaLabel, waitlist = false,
       <SmoothScroll />
 
       <div className="contents" inert={inert}>
-        <LandingNav onGetStarted={onNavCta} ctaLabel={navCtaLabel} appLinks={!waitlist} />
+        <LandingNav onGetStarted={onNavCta} ctaLabel={navCtaLabel} links={navLinks} appLinks={!waitlist} />
         <main>
           {hero}
-          <StepsSection />
-          <AskSection />
-          <SwitchesSection />
-          {closing}
+          {sections}
         </main>
-        <LandingClose inviteLogin={waitlist} />
+        {footer}
       </div>
 
       {overlay}

@@ -6,7 +6,7 @@
  * - Products & services
  * - Business model (B2B SaaS, D2C E-commerce, Marketplace, Agency, etc.)
  * - Target audience
- * - Geography (e.g. US, UK, Global, or explicitly "unspecified")
+ * - Geography (e.g. India, UK, Global, or explicitly "unspecified")
  * - Pricing & positioning (or explicitly "not_disclosed")
  * - Value proposition
  * - Relevant sales and marketing channels
@@ -20,6 +20,7 @@ import type {
   OnboardingInput,
   CompanyIntelligence,
 } from "../intelligence/types";
+import { HOME_MARKET } from "../research/market";
 
 let genAI: GoogleGenerativeAI | null = null;
 
@@ -147,15 +148,16 @@ ${crawledContent.substring(0, 9000) || "No website content crawled."}
 2. INCLUDE EXACT EVIDENCE QUOTES:
    - Populate "evidenceSnippets" with direct short quotes (1-2 sentences) from the crawled text confirming the core offer, value prop, or pricing.
 3. WHAT THEY REALLY SELL (this drives every Google search we run):
+   - Our searches run on Google ${HOME_MARKET}, for buyers in ${HOME_MARKET}. The only exception is a local business (shop, restaurant, salon, clinic) that serves a city outside ${HOME_MARKET}: its searches are for buyers in that city.
    - Decide from the website evidence. The client's "Selected Industry" comes from a short dropdown and can be wrong (a phone maker might pick "Tech & SaaS"). Use the real industry in "industry".
    - "category": the plain words a shopper types for this kind of product, 1-4 words (examples: "smartphones", "thrift clothing", "CRM software", "dog food").
-   - "searchTerms": 5 short Google searches real buyers type when they are close to buying in this category: "best ...", price questions, "... vs ..." comparisons, "buy ... online", "... near me" for local shops. Lowercase, no quotes. Never use words like "software", "platform" or "tools" unless they really sell software. Don't include this business's own brand name.
-   - "likelyCompetitors": up to 8 companies you suspect sell the same kind of product to the same buyers, with their official website domain and "direct" or "indirect". These are only suspicions: they are checked against real search results and dropped if no result confirms them. Return [] if unsure. Never include the business itself, news sites, review sites, or marketplaces.
+   - "searchTerms": 5 short Google searches those buyers type when they are close to buying in this category, worded the way they search: "best ...", price questions, "... vs ..." comparisons, "buy ... online", "... near me" for local shops. Lowercase, no quotes. Never use words like "software", "platform" or "tools" unless they really sell software. Don't include this business's own brand name.
+   - "likelyCompetitors": up to 8 companies you suspect sell the same kind of product to those buyers, with their official website domain and "direct" or "indirect". These are only suspicions: they are checked against real search results and dropped if no result confirms them. Return [] if unsure. Never include the business itself, news sites, review sites, or marketplaces.
    - "sellsPhysicalProducts": true if they sell physical goods.
-4. WHERE THEY SELL (decides which Google market we search):
+4. WHERE THEY SELL (from the website alone; this is about the business, not about our searches):
    - "marketScope": "local" if customers must be in one city or area (restaurant, salon, clinic, local shop, local service), "national" if they sell across one country, "international" if they clearly sell in several countries, "unknown" if the website doesn't show it.
    - "country": the main country they sell in, from evidence (address, phone format, currency, shipping info, domain). "" if unknown.
-   - "city": for local businesses, the city or area from the address or "serving ..." text, e.g. "Austin, Texas". "" if unknown or not local.
+   - "city": for local businesses, the city or area from the address or "serving ..." text, e.g. "Pune, Maharashtra". "" if unknown or not local.
 5. NO INVENTION:
    - "strengths" and "weaknesses": up to 3 each, only ones the website text supports. Empty arrays are fine.
    - "technologyStack": only technology named on the website, otherwise [].
@@ -171,7 +173,7 @@ Return ONLY a valid JSON object matching this schema (no markdown backticks, no 
   "products": ["Product 1", "Product 2"],
   "businessModel": "e.g. B2B SaaS, D2C E-commerce, Marketplace, Subscription, Agency",
   "targetSegments": ["Primary Buyer 1", "Buyer 2"],
-  "geography": "e.g. United States, North America, Global, or 'unspecified'",
+  "geography": "e.g. India, South India, Global, or 'unspecified'",
   "pricingAndPositioning": "Observed pricing structure or 'not_disclosed'",
   "brandTone": "Brand voice / style",
   "strengths": ["Up to 3 strengths the website supports, or none"],
@@ -196,7 +198,7 @@ Return ONLY a valid JSON object matching this schema (no markdown backticks, no 
   "likelyCompetitors": [{"name": "Competitor brand", "domain": "competitor.com", "type": "direct"}],
   "sellsPhysicalProducts": false,
   "marketScope": "national",
-  "country": "United States",
+  "country": "India",
   "city": ""
 }`;
 

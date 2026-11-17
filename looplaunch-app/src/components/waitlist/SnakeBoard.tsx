@@ -259,7 +259,7 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
     const mono =
       getComputedStyle(document.documentElement).getPropertyValue("--font-geist-mono").trim() || "ui-monospace, monospace";
 
-    let game = newGame(randomSeed());
+    const game = newGame(randomSeed());
     let wordAt = Math.floor(Math.random() * WORDS.length);
     const fx: Fx = {
       cell: 24,
@@ -333,15 +333,6 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
       handlers.current.onStatus("play");
       track("game_start");
     };
-    const reset = () => {
-      game = newGame(randomSeed());
-      wordAt = Math.floor(Math.random() * WORDS.length);
-      Object.assign(fx, { parts: [], ring: 0, paused: false, foodBorn: performance.now(), word: WORDS[wordAt % WORDS.length] });
-      showTime(0);
-      clock.set(0, false);
-      patch({ status: "ready", eaten: 0, paused: false });
-      handlers.current.onStatus("ready");
-    };
     const pause = () => {
       if (game.status !== "play" || fx.paused) return;
       fx.paused = true;
@@ -354,16 +345,15 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
       fx.lastStep = performance.now() - fx.pausedFor;
       patch({ paused: false });
     };
+    // One go per person: a finished or bitten run doesn't start again.
     const turn = (dir: Dir) => {
-      if (game.status === "won") return;
-      if (game.status === "lost") reset();
+      if (game.status === "won" || game.status === "lost") return;
       if (game.status === "ready") return begin(dir);
       resume();
       queueTurn(game, dir);
     };
     const tap = () => {
       if (game.status === "ready") begin();
-      else if (game.status === "lost") reset();
       else if (fx.paused) resume();
     };
     controls.current = { turn, tap };
@@ -560,11 +550,11 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
   const hint = touch ? "Swipe or use the pad" : "Arrow keys or WASD";
   const status =
     view.status === "ready"
-      ? `${hint} to start the clock`
+      ? `${hint} to start the clock. One go each`
       : view.status === "won"
         ? `All ${TARGET} eaten`
         : view.status === "lost"
-          ? "Bitten. Try again"
+          ? "Bitten. That was your one go"
           : view.eaten === 0
             ? `Eat ${TARGET} words`
             : `${left} more to go`;
@@ -656,18 +646,19 @@ export function SnakeBoard({ clock, target, touch, onStatus, onFinish, onSkip, o
             className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-[14px] bg-[#09090B]/85 px-6 text-center"
           >
             <p className="text-3xl font-semibold">Oops</p>
-            <p className="text-sm text-text-secondary">Loopy bit his own tail. Shake it off.</p>
+            <p className="text-sm text-text-secondary">
+              Loopy bit his own tail. Everyone gets one go, and that was yours. You can still join.
+            </p>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                controls.current?.tap();
+                onSkip();
               }}
               className="mt-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-black hover:bg-white/90"
             >
-              Try again
+              Join the waitlist
             </button>
-            <p className="text-xs text-text-tertiary">{touch ? "or swipe" : "or press an arrow key"}</p>
           </motion.div>
         )}
         {view.status === "won" && (

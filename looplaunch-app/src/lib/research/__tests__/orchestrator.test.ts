@@ -139,7 +139,7 @@ describe("Every business gets research about its own market", () => {
     assert.deepEqual(result.competitors.map((c) => c.name).sort(), ["Home Slice Pizza", "Via 313"]);
   });
 
-  test("B2B SaaS in the UK: software searches; a name no result mentions is not counted", async () => {
+  test("B2B SaaS whose website points to the UK: software searches on Google India; a name no result mentions is not counted", async () => {
     const fake = fakeSerp({
       searches: {
         "best crm software": serp({ organic: [organic("hubspot.com", "HubSpot CRM", 1), organic("pipedrive.com", "Pipedrive CRM", 2)], ads: [ad("salesforce.com", "Salesforce CRM - Free Trial")] }),
@@ -158,20 +158,31 @@ describe("Every business gets research about its own market", () => {
       profile({ name: "CloseCRM", website: "https://closecrm.co.uk", category: "crm software", country: "United Kingdom" }),
       { deps: d }
     );
-    assert.equal(result.research.market.country, "United Kingdom");
+    assert.equal(result.research.market.country, "India");
+    assert.equal(result.research.market.assumed, true);
+    assert.ok(result.research.limitations.some((l) => l.includes("points to United Kingdom")));
     assert.deepEqual(result.competitors.map((c) => c.name).sort(), ["HubSpot", "Pipedrive", "Salesforce"]);
     assert.deepEqual(result.research.unverifiedCompetitors?.map((u) => u.name), ["Zoho CRM"]);
     assert.ok(result.ads.some((a) => a.relation === "competitor" && a.competitorName === "Salesforce"));
   });
 
-  test("unknown market: assumed country is stated, not hidden", async () => {
+  test("unknown market: searched on Google India, and the guess is stated, not hidden", async () => {
     const fake = fakeSerp();
-    const result = await runResearch(profile({ name: "Mystery", website: "https://mystery.in", category: "tea", country: "", geography: "unspecified" }), {
+    const result = await runResearch(profile({ name: "Mystery", website: "https://mystery.com", category: "tea", country: "", geography: "unspecified" }), {
       deps: deps({ serp: fake.client }),
     });
     assert.equal(result.research.market.country, "India");
+    assert.equal(result.research.market.searchLocation, "India");
     assert.equal(result.research.market.assumed, true);
-    assert.ok(result.research.limitations.some((l) => l.includes(".in")));
+    assert.ok(result.research.limitations.some((l) => l.includes("doesn't say where it sells") && l.includes("Google India")));
+  });
+
+  test("Tavily and the competitor picker are told the market: India, with the country in the article search", async () => {
+    const fake = fakeSerp();
+    const d = deps({ serp: fake.client, tavily: [article("Best green tea brands in India", "Organic India, Tetley and more")] });
+    await runResearch(profile({ name: "Chai Co", category: "green tea", country: "United States", marketScope: "international" }), { deps: d });
+    assert.deepEqual(d.tavilyCalls, [{ query: "best green tea in India 2026", country: "India" }]);
+    assert.equal(d.competitorMarkets[0]?.country, "India");
   });
 
   test("unknown category: no competitor searches are spent", async () => {

@@ -5,7 +5,7 @@ import { AnimatePresence, animate, motion, useReducedMotion, type Variants } fro
 import { LoopyMascot } from "@/components/loopy/LoopyMascot";
 import { RollingCount } from "@/components/dashboard/RollingCount";
 import { FIRST_NAME_MAX, cleanFirstName } from "@/lib/waitlist/names";
-import { BRAND_LINK_MAX, ROLE_MAX, ROLE_OPTIONS, cleanBrandLink, cleanRole } from "@/lib/waitlist/details";
+import { BRAND_LINK_MAX, INDUSTRY_OPTIONS, ROLE_MAX, ROLE_OPTIONS, cleanBrandLink, cleanIndustry, cleanRole } from "@/lib/waitlist/details";
 import { TARGET, formatTime, type FinishedRun } from "@/lib/waitlist/snake";
 import type { Board, JoinResponse } from "@/lib/waitlist/types";
 import { bestRank, rankOn } from "./WaitlistGame";
@@ -45,9 +45,10 @@ function Rise({ children, className, as = "div" }: { children: React.ReactNode; 
 
 interface JoinFormProps {
   run: FinishedRun | null;
-  defaults: { firstName: string; email: string };
+  /** `industry` is pre-picked when they came from an industry's button on the page. */
+  defaults: { firstName: string; email: string; industry: string };
   submitLabel: string;
-  /** New to the waitlist: also ask for their role and where their brand lives online. */
+  /** New to the waitlist: also ask for their industry, role and where their brand lives online. */
   askDetails: boolean;
   onJoined(result: JoinResponse, email: string): void;
 }
@@ -68,7 +69,7 @@ function FieldError({ id, children }: { id: string; children: React.ReactNode })
 }
 
 /**
- * First name and email, and for someone new their role and where their brand lives online.
+ * First name and email, and for someone new their industry (optional), role and where their brand lives online.
  * A finished run goes with it, for the server to replay.
  */
 export function JoinForm({ run, defaults, submitLabel, askDetails, onJoined }: JoinFormProps) {
@@ -76,6 +77,7 @@ export function JoinForm({ run, defaults, submitLabel, askDetails, onJoined }: J
   const [email, setEmail] = useState(defaults.email);
   // The server can ask for the details too, when this browser thought it had already joined.
   const [showDetails, setShowDetails] = useState(askDetails);
+  const [industry, setIndustry] = useState<string>(cleanIndustry(defaults.industry) ?? "");
   const [roleChoice, setRoleChoice] = useState("");
   const [ownRole, setOwnRole] = useState("");
   const [brand, setBrand] = useState("");
@@ -133,7 +135,7 @@ export function JoinForm({ run, defaults, submitLabel, askDetails, onJoined }: J
           email: mail,
           // Joining the waitlist is the request to hear about the launch, so it carries that consent.
           consent: true,
-          ...(showDetails ? { role: cleanRole(role), brand: brand.trim() } : {}),
+          ...(showDetails ? { role: cleanRole(role), brand: brand.trim(), ...(industry ? { industry } : {}) } : {}),
           company: honeypot,
           run: run ? { seed: run.seed, turns: run.turns } : undefined,
         }),
@@ -235,6 +237,34 @@ export function JoinForm({ run, defaults, submitLabel, askDetails, onJoined }: J
 
       {showDetails && (
         <>
+          <motion.fieldset variants={rise} className="mt-4">
+            <legend className="text-sm font-medium text-text-secondary">
+              Your industry <span className="font-normal text-text-tertiary">(optional)</span>
+            </legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {INDUSTRY_OPTIONS.map((option) => {
+                const picked = industry === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={picked}
+                    disabled={sending}
+                    // A second tap on the picked one clears it, since the question is optional.
+                    onClick={() => setIndustry(picked ? "" : option)}
+                    className={`${chip} ${
+                      picked
+                        ? "border-white bg-white font-medium text-black"
+                        : "border-white/15 bg-black/40 text-text-secondary hover:border-white/30 hover:text-text-primary"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.fieldset>
+
           <motion.fieldset variants={rise} className="mt-4" aria-describedby={errors.role ? "join-role-error" : undefined}>
             <legend className="text-sm font-medium text-text-secondary">Your role</legend>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -366,15 +396,28 @@ interface ClaimCardProps {
   board: Board | null;
   me: Me | null;
   signedInEmail: string | null;
+  /** False once this browser has had its one go. */
+  canPlay: boolean;
   draftName?: string;
+  /** An industry picked on the page before the join form opened. */
+  draftIndustry?: string;
   onJoined(result: JoinResponse, email: string): void;
   onPlayAgain(): void;
-  onClose(): void;
 }
 
 /** After a finished run (or a skip): the form that puts someone on the waitlist and their time on the board. */
-export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoined, onPlayAgain, onClose }: ClaimCardProps) {
-  const defaults = { firstName: me?.firstName ?? draftName, email: me?.email ?? signedInEmail ?? "" };
+export function ClaimCard({
+  run,
+  board,
+  me,
+  signedInEmail,
+  canPlay,
+  draftName = "",
+  draftIndustry = "",
+  onJoined,
+  onPlayAgain,
+}: ClaimCardProps) {
+  const defaults = { firstName: me?.firstName ?? draftName, email: me?.email ?? signedInEmail ?? "", industry: draftIndustry };
 
   if (!run) {
     return (
@@ -387,10 +430,17 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
         </Rise>
         <JoinForm run={null} defaults={defaults} submitLabel="Join waitlist" askDetails={!me} onJoined={onJoined} />
         <Rise as="p" className="mt-6 text-sm text-text-secondary">
-          Rather earn a spot on the board?{" "}
-          <button type="button" onClick={onPlayAgain} className="text-text-primary underline underline-offset-4">
-            Play Loopy&apos;s snake
-          </button>
+          {canPlay ? (
+            <>
+              Rather earn a spot on the board?{" "}
+              <button type="button" onClick={onPlayAgain} className="text-text-primary underline underline-offset-4">
+                Play Loopy&apos;s snake
+              </button>{" "}
+              (one go each)
+            </>
+          ) : (
+            "You've had your one go at Loopy's snake."
+          )}
         </Rise>
       </Card>
     );
@@ -399,7 +449,6 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
   const mine = me ? { id: me.entryId, bestMs: me.bestMs } : null;
   const rank = board ? rankOn(board, run.timeMs, mine) : null;
   const players = board ? board.total + (me?.bestMs != null ? 0 : 1) : 0;
-  const notBetter = me?.bestMs != null && run.timeMs >= me.bestMs;
   const standing = !board
     ? null
     : board.total === 0
@@ -422,57 +471,20 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
         <CountUp ms={run.timeMs} />
         <span className="ml-1 text-[0.4em] text-text-tertiary">s</span>
       </motion.p>
-
-      {notBetter ? (
-        <>
-          <p className="mt-4 text-text-secondary">
-            Your best is still <span className="font-mono text-text-primary">{formatTime(me!.bestMs!)}</span>
-            {board ? `, #${bestRank(board, me)} on the board` : ""}. You&apos;re already on the waitlist.
-          </p>
-          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <button type="button" onClick={onPlayAgain} className={primaryButton}>
-              Play again
-            </button>
-            <button type="button" onClick={onClose} className={ghostButton}>
-              Back to the site
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          {standing && (
-            <Rise as="p" className="mt-4 text-text-secondary">
-              {standing}
-            </Rise>
-          )}
-          <Rise as="h2" className="mt-8 text-2xl font-semibold tracking-tight">
-            {!me ? "Claim your spot" : me.bestMs != null ? "Save your new best" : "Put it on the board"}
-          </Rise>
-          <Rise as="p" className="mt-2 text-sm text-text-secondary">
-            {!me
-              ? "Tell us a little about you to join the waitlist and put this time on the board."
-              : me.bestMs != null
-                ? "It replaces your time on the board."
-                : "You're already on the waitlist. This adds your time to the board."}
-          </Rise>
-          <JoinForm
-            run={run}
-            defaults={defaults}
-            submitLabel={!me ? "Join waitlist" : me.bestMs != null ? "Save my new best" : "Save my time"}
-            askDetails={!me}
-            onJoined={onJoined}
-          />
-          <Rise>
-            <button
-              type="button"
-              onClick={onPlayAgain}
-              className="mt-5 min-h-10 text-sm text-text-secondary underline underline-offset-4 transition-colors hover:text-text-primary"
-            >
-              Try for a faster time instead
-            </button>
-          </Rise>
-        </>
+      {standing && (
+        <Rise as="p" className="mt-4 text-text-secondary">
+          {standing}
+        </Rise>
       )}
+      <Rise as="h2" className="mt-8 text-2xl font-semibold tracking-tight">
+        {!me ? "Claim your spot" : "Put it on the board"}
+      </Rise>
+      <Rise as="p" className="mt-2 text-sm text-text-secondary">
+        {!me
+          ? "Tell us a little about you to join the waitlist and put this time on the board. Everyone gets one go, so this is your time."
+          : "You're already on the waitlist. This adds your time to the board."}
+      </Rise>
+      <JoinForm run={run} defaults={defaults} submitLabel={!me ? "Join waitlist" : "Save my time"} askDetails={!me} onJoined={onJoined} />
     </Card>
   );
 }
@@ -480,26 +492,25 @@ export function ClaimCard({ run, board, me, signedInEmail, draftName = "", onJoi
 interface DoneCardProps {
   result: JoinResponse;
   me: Me | null;
+  /** True only for someone who joined without playing and hasn't had their one go. */
+  canPlay: boolean;
   onPlayAgain(): void;
   onClose(): void;
 }
 
-/** Joined: their place on the board, a way to dare friends, and another go. */
-export function DoneCard({ result, me, onPlayAgain, onClose }: DoneCardProps) {
+/** Joined: their place on the board and a way to dare friends (a go of their own, if they haven't played). */
+export function DoneCard({ result, me, canPlay, onPlayAgain, onClose }: DoneCardProps) {
   const onBoard = result.bestMs !== null && result.rank !== null && result.board !== null;
   const name = result.firstName;
 
   if (onBoard) {
     const total = result.board!.total;
-    const firstTime = result.improved && result.previousBestMs === null;
-    const heading = firstTime ? "You're on the board" : result.improved ? "New best" : "Your best still stands";
+    const heading = result.improved ? "You're on the board" : "Your first time stands";
     const note = !result.alreadyJoined
       ? `You're on the waitlist, ${name}. We'll email you first when we launch.`
-      : firstTime
+      : result.improved
         ? `Your time is saved, ${name}. You were already on the waitlist.`
-        : result.improved
-          ? `Saved, ${name}. That's your fastest yet.`
-          : `That run wasn't faster, so your best stays on the board, ${name}.`;
+        : `Only your first go counts, so your earlier time stays on the board, ${name}.`;
     return (
       <Card>
         <Burst />
@@ -523,10 +534,7 @@ export function DoneCard({ result, me, onPlayAgain, onClose }: DoneCardProps) {
           <ShareRow ms={result.bestMs!} />
         </Rise>
         <Rise className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-          <button type="button" onClick={onPlayAgain} className={primaryButton}>
-            Play again
-          </button>
-          <button type="button" onClick={onClose} className={ghostButton}>
+          <button type="button" onClick={onClose} className={primaryButton}>
             Back to the site
           </button>
         </Rise>
@@ -535,7 +543,7 @@ export function DoneCard({ result, me, onPlayAgain, onClose }: DoneCardProps) {
   }
 
   const note = result.runRejected
-    ? "We couldn't check that run, so it isn't on the board. Play again to post a time."
+    ? "We couldn't check that run, so it isn't on the board."
     : result.timeMs !== null
       ? "The leaderboard is offline right now, so this time wasn't saved."
       : result.alreadyJoined
@@ -559,10 +567,50 @@ export function DoneCard({ result, me, onPlayAgain, onClose }: DoneCardProps) {
         {note}
       </Rise>
       <Rise className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-        <button type="button" onClick={onPlayAgain} className={primaryButton}>
-          {result.timeMs === null ? "Play for the leaderboard" : "Play again"}
+        {canPlay && (
+          <button type="button" onClick={onPlayAgain} className={primaryButton}>
+            Play for the leaderboard (one go)
+          </button>
+        )}
+        <button type="button" onClick={onClose} className={canPlay ? ghostButton : primaryButton}>
+          Back to the site
         </button>
-        <button type="button" onClick={onClose} className={ghostButton}>
+      </Rise>
+    </Card>
+  );
+}
+
+/** Opened again by someone on the list who has had their one go: where they stand, nothing to replay. */
+export function AlreadyCard({ me, board, onClose }: { me: Me; board: Board | null; onClose(): void }) {
+  const rank = board && me.bestMs != null ? bestRank(board, me) : null;
+  return (
+    <Card>
+      <motion.div
+        className="flex justify-center"
+        initial={{ y: -30, opacity: 0, rotate: -12 }}
+        animate={{ y: 0, opacity: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 12 }}
+      >
+        <LoopyMascot size={84} mood="wave" />
+      </motion.div>
+      <Rise as="h2" className="mt-5 text-3xl font-semibold tracking-tight">
+        You&apos;re on the list, {me.firstName}.
+      </Rise>
+      <Rise as="p" className="mt-3 text-text-secondary">
+        {me.bestMs != null ? (
+          <>
+            Your time of <span className="font-mono text-text-primary">{formatTime(me.bestMs)}</span> is on the board
+            {rank ? `, #${rank}` : ""}. Everyone gets one go, so that&apos;s your spot.
+          </>
+        ) : (
+          "You've had your one go at Loopy's snake."
+        )}
+      </Rise>
+      <Rise as="p" className="mt-3 text-sm text-text-secondary">
+        We&apos;ll email <span className="text-text-primary">{me.email}</span> when your access is ready.
+      </Rise>
+      <Rise className="mt-8 flex justify-center">
+        <button type="button" onClick={onClose} className={primaryButton}>
           Back to the site
         </button>
       </Rise>

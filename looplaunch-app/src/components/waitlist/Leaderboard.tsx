@@ -185,7 +185,7 @@ export function Leaderboard({ board, status, clock, you, mine }: LeaderboardProp
 
       {myRank !== null && mine?.bestMs != null && (
         <p className="mt-3 border-t border-white/[0.06] pt-4 text-sm text-text-secondary">
-          Your best: <span className="font-mono text-text-primary">{formatTime(mine.bestMs)}</span>, #{myRank} on the
+          Your time: <span className="font-mono text-text-primary">{formatTime(mine.bestMs)}</span>, #{myRank} on the
           board
         </p>
       )}

@@ -5,6 +5,7 @@
 
 import type { IdentifiedCompetitor } from "../../ai/gemini";
 import type { AdvertiserAdCreative, CompanyIntelligence, TavilySearchResult } from "../../intelligence/types";
+import type { SearchMarket } from "../market";
 import type { ResearchDeps } from "../orchestrator";
 import type {
   AdLibraryData,
@@ -92,20 +93,25 @@ export function deps(options: {
   serp: SerpApiClient;
   tavily?: TavilySearchResult[] | ProviderFailureKind;
   competitors?: Array<Partial<IdentifiedCompetitor> & { name: string; domain: string }> | null;
-}): Partial<ResearchDeps> & { geminiCalls: number; tavilyQueries: string[] } {
-  const state = { geminiCalls: 0, tavilyQueries: [] as string[] };
+}): Partial<ResearchDeps> & {
+  geminiCalls: number;
+  tavilyCalls: Array<{ query: string; country: string }>;
+  competitorMarkets: SearchMarket[];
+} {
+  const state = { geminiCalls: 0, tavilyCalls: [] as Array<{ query: string; country: string }>, competitorMarkets: [] as SearchMarket[] };
   return {
     serp: options.serp,
-    tavily: async (query, ledger) => {
-      state.tavilyQueries.push(query);
+    tavily: async (query, ledger, country) => {
+      state.tavilyCalls.push({ query, country });
       const response = options.tavily ?? [];
       ledger.record({ provider: "tavily", operation: "search", query, purpose: "market_evidence", cacheHit: false, success: typeof response !== "string", durationMs: 1 });
       return typeof response === "string"
         ? { ok: false, kind: response, message: `fake ${response}` }
         : { ok: true, data: response, fromCache: false, fetchedAt: NOW.toISOString() };
     },
-    identifyCompetitors: async () => {
+    identifyCompetitors: async (_profile, _evidence, market) => {
       state.geminiCalls++;
+      state.competitorMarkets.push(market);
       if (options.competitors === null) return null;
       return (options.competitors || []).map((c) => ({ type: "direct" as const, similarity: 80, why: `${c.name} sells the same thing.`, evidence: [1], ...c }));
     },
@@ -113,8 +119,11 @@ export function deps(options: {
     get geminiCalls() {
       return state.geminiCalls;
     },
-    get tavilyQueries() {
-      return state.tavilyQueries;
+    get tavilyCalls() {
+      return state.tavilyCalls;
+    },
+    get competitorMarkets() {
+      return state.competitorMarkets;
     },
   };
 }

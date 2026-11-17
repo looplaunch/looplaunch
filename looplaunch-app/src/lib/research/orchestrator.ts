@@ -1,9 +1,10 @@
 /**
  * Research orchestrator: the one place Search Intel research runs.
  *
- *  1. Market        where to search (country / city), from the business profile
+ *  1. Market        where to search: Google India, or the city of a local business (market.ts)
  *  2. Discovery     up to MAX_COMPETITOR_DISCOVERY_QUERIES Google searches (SerpApi) and one
- *                   Tavily search, in parallel; they give organic results, ads, questions
+ *                   Tavily search favouring that country's pages, in parallel; they give
+ *                   organic results, ads, questions
  *  3. Competitors   Gemini names candidates from the numbered evidence; only candidates the
  *                   evidence confirms are kept (see competitors.ts)
  *  4. Competitor ads up to MAX_AD_SEARCH_QUERIES more searches, aimed at competitors and never
@@ -38,7 +39,7 @@ import {
 import { researchConfig, type ResearchConfig } from "./config";
 import { hostOf, registrableDomain } from "./domains";
 import { ResearchLedger } from "./ledger";
-import { resolveMarket } from "./market";
+import { resolveMarket, type SearchMarket } from "./market";
 import { adQueries, categoryOf, discoveryQueries, intentOf } from "./plan";
 import { selectQuestions, type FoundQuestion, type SelectedQuestion } from "./questions";
 import {
@@ -54,10 +55,12 @@ import { searchTavily } from "./tavily";
 
 export interface ResearchDeps {
   serp: SerpApiClient;
-  tavily: (query: string, ledger: ResearchLedger) => Promise<ProviderResult<TavilySearchResult[]>>;
+  /** `country` ranks pages from the researched country higher ("India") */
+  tavily: (query: string, ledger: ResearchLedger, country: string) => Promise<ProviderResult<TavilySearchResult[]>>;
   identifyCompetitors: (
     profile: CompanyIntelligence,
-    evidence: SearchEvidence[]
+    evidence: SearchEvidence[],
+    market: SearchMarket
   ) => Promise<IdentifiedCompetitor[] | null>;
   now: () => Date;
 }
@@ -86,9 +89,9 @@ interface SearchRun {
 
 /** Tavily through the same cache and ledger as SerpApi. */
 function createTavilySearch(cache: ResearchCache, config: ResearchConfig): ResearchDeps["tavily"] {
-  return async (query, ledger) => {
+  return async (query, ledger, country) => {
     const started = Date.now();
-    const params = { q: canonicalQuery(query), depth: "basic", max: 6 };
+    const params = { q: canonicalQuery(query), depth: "basic", max: 6, country: country.toLowerCase() };
     const key = cacheKey("tavily", "search", params);
     const record = (cacheHit: boolean, success: boolean, error?: string) =>
       ledger.record({ provider: "tavily", operation: "search", query, purpose: "market_evidence", cacheHit, success, error, durationMs: Date.now() - started });
@@ -98,7 +101,7 @@ function createTavilySearch(cache: ResearchCache, config: ResearchConfig): Resea
       record(true, true);
       return { ok: true, data: hit.value, fromCache: true, fetchedAt: hit.fetchedAt };
     }
-    const res = await searchTavily({ query, searchDepth: "basic", maxResults: 6 });
+    const res = await searchTavily({ query, searchDepth: "basic", maxResults: 6, country });
     if (!res.success) {
       const notConfigured = /not configured/i.test(res.error || "");
       record(false, false, res.error);
@@ -115,7 +118,7 @@ export function defaultResearchDeps(config: ResearchConfig): ResearchDeps {
   return {
     serp: createSerpApiClient({ apiKey: process.env.SERPAPI_API_KEY, cache, config }),
     tavily: createTavilySearch(cache, config),
-    identifyCompetitors: (profile, evidence) => identifyCompetitors(profile, evidence),
+    identifyCompetitors: (profile, evidence, market) => identifyCompetitors(profile, evidence, market),
     now: () => new Date(),
   };
 }
@@ -203,15 +206,16 @@ export async function runResearch(
     limitations.push("The website didn't make clear what this business sells, so competitor searches were skipped.");
   }
   const discovery = discoveryQueries(profile, market, config.maxDiscoveryQueries).filter(() => ledger.take("competitor_discovery"));
+  // Google already searches from the market; Tavily searches the whole web, so the query names it.
   const tavilyQuery = category
     ? market.scope === "local" && market.city
       ? `best ${category} in ${market.city}`
-      : `best ${category} ${deps.now().getFullYear()}`
+      : `best ${category} in ${market.country} ${deps.now().getFullYear()}`
     : "";
 
   const [discoveryRuns, articleResult] = await Promise.all([
     Promise.all(discovery.map((q) => search(q.query, "competitor_discovery"))),
-    tavilyQuery && ledger.take("market_evidence") ? deps.tavily(tavilyQuery, ledger) : Promise.resolve(null),
+    tavilyQuery && ledger.take("market_evidence") ? deps.tavily(tavilyQuery, ledger, market.country) : Promise.resolve(null),
   ]);
   discoveryRuns.forEach(absorb);
   const articles = articleResult?.ok ? articleResult.data : [];
@@ -224,7 +228,8 @@ export async function runResearch(
   if (evidence.length > 0) {
     const identified = await deps.identifyCompetitors(
       profile,
-      evidence.map((e) => ({ n: e.n, kind: e.kind, title: e.title, domain: e.host, snippet: e.snippet }))
+      evidence.map((e) => ({ n: e.n, kind: e.kind, title: e.title, domain: e.host, snippet: e.snippet })),
+      market
     );
     if (identified) {
       candidates = identified;

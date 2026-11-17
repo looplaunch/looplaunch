@@ -1,16 +1,19 @@
 /**
  * POST /api/waitlist
  *
- * Body: { email, firstName, consent, role?, brand?, run?, company? }
- * Adds someone to the Supabase `waitlist` table (migrations 006, 008 and 009). Public: this is the
+ * Body: { email, firstName, consent, role?, brand?, industry?, run?, company? }
+ * Adds someone to the Supabase `waitlist` table (migrations 006, 008, 009 and 010). Public: this is the
  * only thing visitors can do while Loop Launch is invite-only.
  *
  * `role` (Founder, CEO… or their own words) and `brand` (where the brand lives online: a website,
  * Instagram, LinkedIn…) are required to join. Someone already on the list who is only saving a
  * new time can leave them out; if their row has none yet, the ones sent fill it in.
  *
+ * `industry` is optional: one of INDUSTRY_OPTIONS (Fashion, Food & Beverage, Beauty & Personal Care,
+ * Something else). Anything else is ignored. Someone already on the list with none gets this one.
+ *
  * `run` is a finished game of Loopy's snake, { seed, turns }. The server replays it to get the
- * time, so a time can't be made up, and keeps each person's best for the leaderboard.
+ * time, so a time can't be made up. Each person gets one go: only their first time is kept.
  *
  * `company` is a honeypot field hidden from people. Bots fill it in; we pretend to
  * succeed and store nothing.
@@ -19,7 +22,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/db/supabase";
 import { BoardNotSetUpError, MissingDetailsError, joinWaitlist, waitlistStore } from "@/lib/waitlist/board";
-import { cleanBrandLink, cleanRole, parseDetails } from "@/lib/waitlist/details";
+import { cleanBrandLink, cleanIndustry, cleanRole, parseDetails } from "@/lib/waitlist/details";
 import { cleanFirstName, isBlockedName } from "@/lib/waitlist/names";
 import { parseRun, replay } from "@/lib/waitlist/snake";
 import type { JoinResponse } from "@/lib/waitlist/types";
@@ -59,6 +62,7 @@ export async function POST(request: Request) {
     company?: unknown;
     role?: unknown;
     brand?: unknown;
+    industry?: unknown;
   };
   const firstName = cleanFirstName(body.firstName);
 
@@ -94,6 +98,8 @@ export async function POST(request: Request) {
     if (!cleanBrandLink(body.brand)) return badRequest("Please add a link to your brand, like yourbrand.com or instagram.com/yourbrand.");
   }
 
+  const industry = cleanIndustry(body.industry);
+
   // A run that doesn't replay to a finish still lets the person join; it just doesn't get a time.
   let timeMs: number | null = null;
   let runRejected = false;
@@ -113,7 +119,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const joined = await joinWaitlist(store, { email, firstName, timeMs, source, userAgent, details });
+    const joined = await joinWaitlist(store, { email, firstName, timeMs, source, userAgent, details, industry });
     const response: JoinResponse = {
       ok: true,
       alreadyJoined: joined.alreadyJoined,
