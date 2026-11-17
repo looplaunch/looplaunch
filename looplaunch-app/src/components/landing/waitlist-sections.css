@@ -362,6 +362,10 @@
   .nw-pb-row2 {
     margin-top: 96px;
   }
+  /* Starts the questions level with the heading, below the eyebrow above it */
+  .nw-pb-side {
+    padding-top: calc(var(--nw-fs-eyebrow) * 1.6 + 24px);
+  }
 }
 
 /* ─── How it works: timeline ─── */

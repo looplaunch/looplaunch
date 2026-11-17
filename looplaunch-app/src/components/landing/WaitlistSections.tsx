@@ -124,7 +124,7 @@ function ProblemSection() {
               They had a team. but no one to think marketing.
             </h2>
           </div>
-          <div>
+          <div className="nw-pb-side">
             <div className="nw-asks">
               {[
                 ["A CMO?", "Out of budget."],

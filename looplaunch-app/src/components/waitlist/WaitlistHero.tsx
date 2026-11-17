@@ -70,7 +70,7 @@ export function WaitlistHero() {
         <p className="mt-5 max-w-xl text-base text-balance text-text-secondary sm:text-lg">
           <span className="sm:block">It scans your business, competitors and market,</span>{" "}
           <span className="sm:block">then tells you exactly what to do this week.</span>{" "}
-          <span className="sm:block">Join the waitlist for early access.</span>
+          <span className="font-bold text-text-primary sm:block">Join the waitlist for early access.</span>
         </p>
 
         <ul className="mt-8 flex flex-wrap justify-center gap-2" aria-label="Who it’s for">

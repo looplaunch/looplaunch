@@ -23,9 +23,9 @@ export function getSiteUrl(): string {
 
 export const siteConfig = {
   name: "Loop Launch",
-  title: "Loop Launch — AI-Powered Strategic Marketing Intelligence",
+  title: "Loop Launch — Human Intelligence-Powered Strategy and Content Engine",
   description:
-    "Loop Launch diagnoses your marketing, analyzes competitors, evaluates positioning, and delivers actionable strategic intelligence powered by AI.",
+    "Your virtual CMO. It scans your business, competitors and market, then tells you exactly what to do this week.",
   url: getSiteUrl(),
   ogImage: `${getSiteUrl()}/og-image.png`,
   keywords: [

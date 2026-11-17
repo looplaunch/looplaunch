@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
+import { siteConfig } from "@/lib/seo";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Loop Launch — AI-Powered Strategic Marketing",
+    name: siteConfig.title,
     short_name: "Loop Launch",
-    description:
-      "Loop Launch helps companies understand their business, market, competitors, and marketing strategy using AI.",
+    description: siteConfig.description,
     start_url: "/",
     display: "standalone",
     background_color: "#000000",
