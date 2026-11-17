@@ -206,16 +206,16 @@
   max-width: 14ch;
   line-height: 1.25;
 }
+/* The brighter violet: 1px of the brand violet reads as grey on black */
 .nw-asks {
   display: grid;
-  gap: 12px;
+  border: 1px solid #7c3aed;
 }
-/* The brighter violet: 1px of the brand violet reads as grey on black */
 .nw-ask {
   padding: 20px;
-  background: var(--nw-surface);
-  border: 1px solid #7c3aed;
-  border-radius: var(--nw-r-card);
+}
+.nw-ask + .nw-ask {
+  border-top: 1px solid #7c3aed;
 }
 /* Each question on one line, so every answer sits on the same second line */
 .nw-ask-q {
@@ -329,12 +329,16 @@
   line-height: 1.6;
 }
 @media (min-width: 640px) {
-  /* Equal boxes, except one never shrinks below its question, so "A marketing head?" never wraps */
+  /* Columns fit their question (then share the spare room), so "A marketing head?" never wraps */
   .nw-asks {
-    grid-template-columns: repeat(3, minmax(max-content, 1fr));
+    grid-template-columns: repeat(3, auto);
   }
   .nw-ask {
     padding: 24px 20px;
+  }
+  .nw-ask + .nw-ask {
+    border-top: 0;
+    border-left: 1px solid #7c3aed;
   }
 }
 @media (min-width: 720px) {
